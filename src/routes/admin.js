@@ -10,9 +10,10 @@ const { getDb } = require('../db/database');
 const { requireRole } = require('../middleware/roles');
 const { parseStudentCSV } = require('../services/questionParser');
 const XLSX = require('xlsx');
+const os = require('os');
 
 const router = express.Router();
-const upload = multer({ dest: path.resolve(process.env.UPLOAD_DIR || './uploads', 'temp') });
+const upload = multer({ dest: os.tmpdir() });
 
 // All admin routes require admin role
 router.use(requireRole('admin'));

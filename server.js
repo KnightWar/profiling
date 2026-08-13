@@ -10,6 +10,11 @@ const { isPg, getDb, initDb, closeDb } = require('./src/db/database');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy for secure cookies on Vercel/production
+if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+  app.set('trust proxy', 1);
+}
+
 // ─── Ensure directories (only locally) ───────────────────────────────────────
 if (!isPg) {
   fs.mkdirSync(path.resolve(process.env.UPLOAD_DIR || './uploads'), { recursive: true });

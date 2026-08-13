@@ -19,6 +19,9 @@ function getPgPool() {
   if (!_pgPool) {
     _pgPool = new Pool({
       connectionString: process.env.DATABASE_URL,
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
       ssl: {
         rejectUnauthorized: false, // Required for Neon
       },
@@ -144,8 +147,20 @@ function getDb() {
 
 async function initDb() {
   if (isPg) {
-    console.log('[DB] Running PostgreSQL initialization...');
     const pool = getPgPool();
+    
+    // Quick check if schema is already applied to avoid 10+ second DDL execution on cold starts
+    try {
+      const checkRes = await pool.query('SELECT COUNT(*) as c FROM components');
+      const count = parseInt(checkRes.rows[0].c, 10);
+      if (count > 0) {
+        return; // Schema and seed already applied!
+      }
+    } catch (e) {
+      // Table doesn't exist yet, proceed with full initialization
+    }
+
+    console.log('[DB] Running PostgreSQL initialization...');
     const schemaPath = path.join(__dirname, 'schema-pg.sql');
     if (fs.existsSync(schemaPath)) {
       const schema = fs.readFileSync(schemaPath, 'utf-8');

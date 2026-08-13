@@ -26,11 +26,11 @@ router.use(requireRole('admin'));
 router.get('/dashboard', async (req, res) => {
   const db = getDb();
 
-  const totalStudents = await db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'student'").get().c;
-  const totalExams = await db.prepare('SELECT COUNT(*) as c FROM exams').get().c;
-  const publishedExams = await db.prepare('SELECT COUNT(*) as c FROM exams WHERE is_published = 1').get().c;
-  const totalQuestions = await db.prepare('SELECT COUNT(*) as c FROM questions').get().c;
-  const pendingReview = await db.prepare("SELECT COUNT(*) as c FROM responses WHERE status IN ('submitted', 'pending_review')").get().c;
+  const totalStudents = (await db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'student'").get()).c;
+  const totalExams = (await db.prepare('SELECT COUNT(*) as c FROM exams').get()).c;
+  const publishedExams = (await db.prepare('SELECT COUNT(*) as c FROM exams WHERE is_published = 1').get()).c;
+  const totalQuestions = (await db.prepare('SELECT COUNT(*) as c FROM questions').get()).c;
+  const pendingReview = (await db.prepare("SELECT COUNT(*) as c FROM responses WHERE status IN ('submitted', 'pending_review')").get()).c;
 
   const components = await db.prepare('SELECT * FROM components ORDER BY id').all();
 
@@ -113,7 +113,7 @@ router.get('/students', async (req, res) => {
   params.push(parseInt(limit), offset);
 
   const students = await db.prepare(sql).all(...params);
-  const total = await db.prepare(countSql).get(...countParams).c;
+  const total = (await db.prepare(countSql).get(...countParams)).c;
 
   res.json({ students, total, page: parseInt(page), limit: parseInt(limit) });
 });

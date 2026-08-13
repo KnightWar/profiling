@@ -1,0 +1,336 @@
+/**
+ * Question Routes — CRUD + AI Generation + File Upload
+ */
+
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const { getDb } = require('../db/database');
+const { requireRole } = require('../middleware/roles');
+const { generateQuestions } = require('../services/gemini');
+const { parseQuestionFile } = require('../services/questionParser');
+
+const os = require('os');
+
+const router = express.Router();
+const upload = multer({ dest: os.tmpdir() });
+
+// All routes require admin
+router.use(requireRole('admin'));
+
+// ─── GET /api/admin/exams/:id/questions ─────────────────────────────────────
+router.get('/exams/:id/questions', async (req, res, next) => {
+  try {
+    const db = getDb();
+    const exam = await db.prepare('SELECT * FROM exams WHERE id = ?').get(req.params.id);
+    if (!exam) {
+      return res.status(404).json({ error: 'Exam not found' });
+    }
+
+    const questions = await db.prepare(
+      'SELECT * FROM questions WHERE exam_id = ? ORDER BY sort_order, id'
+    ).all(req.params.id);
+
+    // Parse JSON fields
+    const parsed = questions.map(q => ({
+      ...q,
+      options: q.options ? JSON.parse(q.options) : null,
+      test_cases: q.test_cases ? JSON.parse(q.test_cases) : null,
+      rubric: q.rubric ? JSON.parse(q.rubric) : null,
+    }));
+
+    const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
+    const typeCounts = {};
+    questions.forEach(q => {
+      typeCounts[q.type] = (typeCounts[q.type] || 0) + q.marks;
+    });
+
+    res.json({
+      exam,
+      questions: parsed,
+      summary: { totalMarks, typeCounts, questionCount: questions.length },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/admin/exams/:id/questions ────────────────────────────────────
+// Add a single question manually
+router.post('/exams/:id/questions', async (req, res, next) => {
+  try {
+    const db = getDb();
+    const exam = await db.prepare('SELECT * FROM exams WHERE id = ?').get(req.params.id);
+    if (!exam) {
+      return res.status(404).json({ error: 'Exam not found' });
+    }
+
+    const { type, marks, content, options, correct_answer, test_cases, rubric, difficulty } = req.body;
+
+    if (!type || !marks || !content) {
+      return res.status(400).json({ error: 'type, marks, and content are required' });
+    }
+
+    // Validate MCQ has options
+    if (type === 'mcq' && (!options || !Array.isArray(options) || options.length < 2)) {
+      return res.status(400).json({ error: 'MCQ requires at least 2 options' });
+    }
+
+    const maxSort = await db.prepare('SELECT MAX(sort_order) as m FROM questions WHERE exam_id = ?').get(req.params.id);
+
+    const result = await db.prepare(`
+      INSERT INTO questions (exam_id, type, marks, content, options, correct_answer, test_cases, rubric, sort_order, source, difficulty)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?)
+    `).run(
+      req.params.id,
+      type,
+      marks,
+      content,
+      options ? JSON.stringify(options) : null,
+      correct_answer || null,
+      test_cases ? JSON.stringify(test_cases) : null,
+      rubric ? JSON.stringify(rubric) : null,
+      (maxSort?.m || 0) + 1,
+      difficulty || 'medium'
+    );
+
+    res.status(201).json({ message: 'Question added', question_id: result.lastInsertRowid });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/admin/exams/:id/questions/upload ─────────────────────────────
+// Upload questions from XLSX/CSV/JSON file
+router.post('/exams/:id/questions/upload', upload.single('file'), async (req, res, next) => {
+  try {
+    const db = getDb();
+    const exam = await db.prepare('SELECT * FROM exams WHERE id = ?').get(req.params.id);
+    if (!exam) {
+      return res.status(404).json({ error: 'Exam not found' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'File required' });
+    }
+
+    const questions = parseQuestionFile(req.file.path, req.file.originalname);
+    const maxSort = await db.prepare('SELECT MAX(sort_order) as m FROM questions WHERE exam_id = ?').get(req.params.id);
+    let sortOrder = (maxSort?.m || 0);
+
+    const insert = db.prepare(`
+      INSERT INTO questions (exam_id, type, marks, content, options, correct_answer, test_cases, rubric, sort_order, source, difficulty)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?)
+    `);
+
+    let count = 0;
+    const insertMany = db.transaction(async (qs) => {
+      for (const q of qs) {
+        sortOrder++;
+        await insert.run(
+          req.params.id,
+          q.type || 'mcq',
+          q.marks || 1,
+          q.content || q.question,
+          q.options ? JSON.stringify(q.options) : null,
+          q.correct_answer || q.correct || null,
+          q.test_cases ? JSON.stringify(q.test_cases) : null,
+          q.rubric ? JSON.stringify(q.rubric) : null,
+          sortOrder,
+          q.difficulty || 'medium'
+        );
+        count++;
+      }
+    });
+
+    await insertMany(questions);
+
+    // Clean up temp file
+    const fs = require('fs');
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    res.json({ message: `Uploaded ${count} questions`, count });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/admin/exams/:id/questions/generate ───────────────────────────
+// AI Generate questions via Gemini
+router.post('/exams/:id/questions/generate', async (req, res, next) => {
+  try {
+    const db = getDb();
+    const exam = await db.prepare(`
+      SELECT e.*, c.name as component_name, c.display_name, c.question_type_mix as default_mix
+      FROM exams e
+      JOIN components c ON c.id = e.component_id
+      WHERE e.id = ?
+    `).get(req.params.id);
+
+    if (!exam) {
+      return res.status(404).json({ error: 'Exam not found' });
+    }
+
+    const { topic, description, difficulty, questionTypes } = req.body;
+
+    if (!topic) {
+      return res.status(400).json({ error: 'topic is required' });
+    }
+
+    // Use provided question types or fall back to component defaults
+    const typeMix = questionTypes || JSON.parse(exam.default_mix || exam.question_type_mix || '{}');
+
+    const generated = await generateQuestions({
+      topic,
+      description: description || '',
+      difficulty: difficulty || 'medium',
+      component: exam.component_name,
+      typeMix,
+    });
+
+    // Return preview (don't save yet — let admin review first)
+    res.json({
+      message: `Generated ${generated.length} questions`,
+      questions: generated,
+      typeMix,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/admin/exams/:id/questions/save-generated ─────────────────────
+// Save reviewed AI-generated questions
+router.post('/exams/:id/questions/save-generated', async (req, res, next) => {
+  try {
+    const db = getDb();
+    const exam = await db.prepare('SELECT * FROM exams WHERE id = ?').get(req.params.id);
+    if (!exam) {
+      return res.status(404).json({ error: 'Exam not found' });
+    }
+
+    const { questions, clearExisting } = req.body;
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({ error: 'questions array required' });
+    }
+
+    const saveAll = db.transaction(async () => {
+      // Optionally clear existing questions
+      if (clearExisting) {
+        await db.prepare('DELETE FROM questions WHERE exam_id = ?').run(req.params.id);
+      }
+
+      const maxSort = await db.prepare('SELECT MAX(sort_order) as m FROM questions WHERE exam_id = ?').get(req.params.id);
+      let sortOrder = maxSort?.m || 0;
+
+      const insert = db.prepare(`
+        INSERT INTO questions (exam_id, type, marks, content, options, correct_answer, test_cases, rubric, sort_order, source, difficulty)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ai_generated', ?)
+      `);
+
+      let count = 0;
+      for (const q of questions) {
+        sortOrder++;
+        await insert.run(
+          req.params.id,
+          q.type,
+          q.marks,
+          q.content || q.question,
+          q.options ? JSON.stringify(q.options) : null,
+          q.correct_answer || q.correct || null,
+          q.test_cases ? JSON.stringify(q.test_cases) : null,
+          q.rubric ? JSON.stringify(q.rubric) : null,
+          sortOrder,
+          q.difficulty || 'medium'
+        );
+        count++;
+      }
+      return count;
+    });
+
+    const count = await saveAll();
+    res.json({ message: `Saved ${count} AI-generated questions`, count });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── PUT /api/admin/questions/:id ───────────────────────────────────────────
+router.put('/questions/:id', async (req, res, next) => {
+  try {
+    const db = getDb();
+    const question = await db.prepare('SELECT * FROM questions WHERE id = ?').get(req.params.id);
+    if (!question) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+
+    const { type, marks, content, options, correct_answer, test_cases, rubric, difficulty, sort_order } = req.body;
+    const updates = [];
+    const params = [];
+
+    if (type !== undefined) { updates.push('type = ?'); params.push(type); }
+    if (marks !== undefined) { updates.push('marks = ?'); params.push(marks); }
+    if (content !== undefined) { updates.push('content = ?'); params.push(content); }
+    if (options !== undefined) { updates.push('options = ?'); params.push(JSON.stringify(options)); }
+    if (correct_answer !== undefined) { updates.push('correct_answer = ?'); params.push(correct_answer); }
+    if (test_cases !== undefined) { updates.push('test_cases = ?'); params.push(JSON.stringify(test_cases)); }
+    if (rubric !== undefined) { updates.push('rubric = ?'); params.push(JSON.stringify(rubric)); }
+    if (difficulty !== undefined) { updates.push('difficulty = ?'); params.push(difficulty); }
+    if (sort_order !== undefined) { updates.push('sort_order = ?'); params.push(sort_order); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    params.push(req.params.id);
+    await db.prepare(`UPDATE questions SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    res.json({ message: 'Question updated' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── DELETE /api/admin/questions/:id ────────────────────────────────────────
+router.delete('/questions/:id', async (req, res, next) => {
+  try {
+    const db = getDb();
+    const result = await db.prepare('DELETE FROM questions WHERE id = ?').run(req.params.id);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+    res.json({ message: 'Question deleted' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/admin/exams/:id/questions/bulk-delete ────────────────────────
+router.post('/exams/:id/questions/bulk-delete', async (req, res, next) => {
+  const { question_ids } = req.body;
+  if (!Array.isArray(question_ids) || question_ids.length === 0) {
+    return res.status(400).json({ error: 'No questions selected' });
+  }
+
+  try {
+    const db = getDb();
+    const deleteTx = db.transaction(async (ids) => {
+      const stmt = db.prepare('DELETE FROM questions WHERE id = ? AND exam_id = ?');
+      let count = 0;
+      for (const id of ids) {
+        const res = await stmt.run(id, req.params.id);
+        count += res.changes;
+      }
+      return count;
+    });
+
+    const deletedCount = await deleteTx(question_ids);
+    res.json({ message: `Successfully deleted ${deletedCount} questions` });
+  } catch (err) {
+    next(err);
+  }
+});
+
+module.exports = router;

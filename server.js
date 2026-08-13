@@ -1,0 +1,176 @@
+require('dotenv').config();
+
+const express = require('express');
+const session = require('express-session');
+const path = require('path');
+const fs = require('fs');
+
+const { isPg, getDb, initDb, closeDb } = require('./src/db/database');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// ─── Ensure directories (only locally) ───────────────────────────────────────
+if (!isPg) {
+  fs.mkdirSync(path.resolve(process.env.UPLOAD_DIR || './uploads'), { recursive: true });
+  fs.mkdirSync(path.resolve('./data'), { recursive: true });
+}
+
+// ─── Middleware ─────────────────────────────────────────────────────────────
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Session config (Postgres in production, SQLite in local development)
+let sessionStore;
+if (isPg) {
+  const PgStore = require('connect-pg-simple')(session);
+  const { Pool } = require('pg');
+  sessionStore = new PgStore({
+    pool: new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    }),
+    tableName: 'session',
+    createTableIfMissing: true
+  });
+} else {
+  const SQLiteStore = require('connect-sqlite3')(session);
+  sessionStore = new SQLiteStore({
+    db: 'sessions.db',
+    dir: path.resolve('./data'),
+    concurrentDB: true,
+  });
+}
+
+app.use(session({
+  store: sessionStore,
+  secret: process.env.SESSION_SECRET || 'cas-dev-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax',
+  },
+}));
+
+// Static files
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Upload files served statically
+app.use('/uploads', express.static(path.resolve(process.env.UPLOAD_DIR || './uploads')));
+
+// ─── Lazy DB Initialization (Serverless Friendly) ───────────────────────────
+let isDbInitialized = false;
+let dbInitPromise = null;
+
+app.use(async (req, res, next) => {
+  if (!isDbInitialized) {
+    if (!dbInitPromise) {
+      dbInitPromise = initDb()
+        .then(() => {
+          isDbInitialized = true;
+          dbInitPromise = null;
+        })
+        .catch(err => {
+          console.error('[DB] Lazy initialization failed:', err);
+          dbInitPromise = null;
+          next(err);
+        });
+    }
+    await dbInitPromise;
+  }
+  next();
+});
+
+// ─── Single Session Enforcement ──────────────────────────────────────────────
+app.use('/api', async (req, res, next) => {
+  // Skip auth routes (login)
+  if (req.path === '/auth/login' || req.path === '/auth/access-code-login') {
+    return next();
+  }
+
+  if (req.session && req.session.userId) {
+    try {
+      const db = getDb();
+      const user = await db.prepare('SELECT active_session_id FROM users WHERE id = ?').get(req.session.userId);
+      
+      // If user's active session doesn't match this request's session ID, invalidate this session
+      if (user && user.active_session_id && user.active_session_id !== req.sessionID) {
+        req.session.destroy();
+        return res.status(401).json({ error: 'Session expired. You logged in from another device or browser.' });
+      }
+    } catch (err) {
+      console.error('Session validation error:', err);
+    }
+  }
+  next();
+});
+
+// ─── API Routes ─────────────────────────────────────────────────────────────
+const authRoutes = require('./src/routes/auth');
+const adminRoutes = require('./src/routes/admin');
+const questionRoutes = require('./src/routes/questions');
+const examRoutes = require('./src/routes/exam');
+const evaluatorRoutes = require('./src/routes/evaluator');
+const scoreRoutes = require('./src/routes/scores');
+
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/admin', questionRoutes);
+app.use('/api/student', examRoutes);
+app.use('/api/evaluator', evaluatorRoutes);
+app.use('/api/scores', scoreRoutes);
+
+// ─── SPA fallback ───────────────────────────────────────────────────────────
+app.get('*', (req, res) => {
+  // Don't catch API routes
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// ─── Error handler ──────────────────────────────────────────────────────────
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({
+    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+  });
+});
+
+// Graceful shutdown (only outside Vercel)
+if (!process.env.VERCEL) {
+  process.on('SIGINT', () => {
+    console.log('\nShutting down...');
+    closeDb();
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', () => {
+    closeDb();
+    process.exit(0);
+  });
+}
+
+// ─── Start ──────────────────────────────────────────────────────────────────
+if (require.main === module) {
+  console.log('\n══════════════════════════════════════════════');
+  console.log('  Composite Assessment System');
+  console.log('══════════════════════════════════════════════');
+  
+  initDb().then(() => {
+    isDbInitialized = true;
+    app.listen(PORT, () => {
+      console.log(`\n[SERVER] Running on http://localhost:${PORT}`);
+      console.log(`[SERVER] Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log('══════════════════════════════════════════════\n');
+    });
+  }).catch(err => {
+    console.error('[SERVER] Database initialization failed:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = app;

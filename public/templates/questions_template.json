@@ -1,0 +1,93 @@
+[
+  {
+    "component": "Technical",
+    "type": "mcq",
+    "question": "What is the time complexity of searching in a Balanced Binary Search Tree (AVL/Red-Black)?",
+    "Option A": "O(1)",
+    "Option B": "O(log N)",
+    "Option C": "O(N)",
+    "Option D": "O(N^2)",
+    "Correct Answer": "B",
+    "marks": 1,
+    "difficulty": "medium",
+    "rubric": ""
+  },
+  {
+    "component": "Technical",
+    "type": "programming",
+    "question": "Write a function to check if a string is a palindrome.",
+    "Option A": "",
+    "Option B": "",
+    "Option C": "",
+    "Option D": "",
+    "Correct Answer": "def is_palindrome(s):\n    return s == s[::-1]",
+    "marks": 5,
+    "difficulty": "medium",
+    "rubric": ""
+  },
+  {
+    "component": "Aptitude",
+    "type": "mcq",
+    "question": "Look at this series: 2, 1, (1/2), (1/4), ... What number should come next?",
+    "Option A": "(1/3)",
+    "Option B": "(1/8)",
+    "Option C": "(2/8)",
+    "Option D": "(1/16)",
+    "Correct Answer": "B",
+    "marks": 1,
+    "difficulty": "easy",
+    "rubric": ""
+  },
+  {
+    "component": "Written English",
+    "type": "mcq",
+    "question": "Choose the correct sentence:",
+    "Option A": "Neither of the boys were present.",
+    "Option B": "Neither of the boys was present.",
+    "Option C": "Neither of the boy was present.",
+    "Option D": "Neither of boys were present.",
+    "Correct Answer": "B",
+    "marks": 1,
+    "difficulty": "easy",
+    "rubric": ""
+  },
+  {
+    "component": "Written English",
+    "type": "writing_task",
+    "question": "Draft a formal email to a client explaining a planned maintenance downtime scheduled for this weekend. Include details about impacted services, duration (2 hours), and emergency support contacts.",
+    "Option A": "",
+    "Option B": "",
+    "Option C": "",
+    "Option D": "",
+    "Correct Answer": "Sample Email:\nSubject: Scheduled System Maintenance\nDear Client,\nPlease be advised that system maintenance is scheduled for Saturday 2:00 AM UTC. Services will be offline for 2 hours. For emergencies, contact support@cas.local.",
+    "marks": 15,
+    "difficulty": "medium",
+    "rubric": "{\"criteria\":[\"Relevance\",\"Organization\",\"Grammar & Vocabulary\",\"Professional Tone\"],\"max_per_criterion\":3.75}"
+  },
+  {
+    "component": "Oral English",
+    "type": "oral_task",
+    "question": "Read aloud passage: \"Artificial Intelligence is transforming industries by enabling machines to learn from data, make complex decisions, and automate repetitive tasks efficiently.\"",
+    "Option A": "",
+    "Option B": "",
+    "Option C": "",
+    "Option D": "",
+    "Correct Answer": "Passage read-aloud task evaluated on fluency and pronunciation.",
+    "marks": 10,
+    "difficulty": "medium",
+    "rubric": "{\"criteria\":[\"Fluency\",\"Pronunciation\",\"Vocabulary\",\"Coherence\"],\"max_per_criterion\":2.5}"
+  },
+  {
+    "component": "Oral English",
+    "type": "oral_task",
+    "question": "Describe a challenging project where you had to work with a team under tight deadlines. What role did you play and how did you resolve conflicts?",
+    "Option A": "",
+    "Option B": "",
+    "Option C": "",
+    "Option D": "",
+    "Correct Answer": "Open-ended interview speech prompt.",
+    "marks": 15,
+    "difficulty": "hard",
+    "rubric": "{\"criteria\":[\"Fluency\",\"Pronunciation\",\"Vocabulary\",\"Coherence\"],\"max_per_criterion\":3.75}"
+  }
+]

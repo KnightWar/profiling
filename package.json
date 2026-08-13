@@ -1,0 +1,27 @@
+{
+  "name": "composite-assessment-system",
+  "version": "1.0.0",
+  "description": "Deterministic weighted assessment system — 4 components, 3 readiness levels, Gemini AI question generation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "seed": "node src/db/seed-runner.js",
+    "test": "node --test src/tests/*.test.js"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.8.0",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.7.0",
+    "connect-pg-simple": "^10.0.0",
+    "connect-sqlite3": "^0.9.15",
+    "csv-parse": "^5.6.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.0",
+    "express-session": "^1.18.1",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.23.0",
+    "uuid": "^9.0.1",
+    "xlsx": "^0.18.5"
+  }
+}

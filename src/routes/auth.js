@@ -33,14 +33,20 @@ router.post('/login', async (req, res) => {
     req.session.userId = user.id;
     req.session.role = user.role;
 
-    res.json({
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        roll_no: user.roll_no,
-      },
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error:', err);
+        return res.status(500).json({ error: 'Login failed' });
+      }
+      res.json({
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          roll_no: user.roll_no,
+        },
+      });
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -113,22 +119,28 @@ router.post('/access-code-login', async (req, res) => {
     // Update active session ID for single-login enforcement
     await db.prepare('UPDATE users SET active_session_id = ? WHERE id = ?').run(req.sessionID, student.id);
 
-    res.json({
-      user: {
-        id: student.id,
-        name: student.name,
-        email: student.email,
-        role: student.role,
-        roll_no: student.roll_no,
-      },
-      exam: {
-        id: exam.id,
-        title: exam.title,
-        component_name: exam.component_name,
-        duration_minutes: exam.duration_minutes,
-        timer_enabled: exam.timer_enabled !== 0,
-        access_code: exam.access_code,
-      },
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error:', err);
+        return res.status(500).json({ error: 'Login failed' });
+      }
+      res.json({
+        user: {
+          id: student.id,
+          name: student.name,
+          email: student.email,
+          role: student.role,
+          roll_no: student.roll_no,
+        },
+        exam: {
+          id: exam.id,
+          title: exam.title,
+          component_name: exam.component_name,
+          duration_minutes: exam.duration_minutes,
+          timer_enabled: exam.timer_enabled !== 0,
+          access_code: exam.access_code,
+        },
+      });
     });
   } catch (err) {
     console.error('Access code login error:', err);

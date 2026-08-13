@@ -109,7 +109,7 @@ router.get('/students', async (req, res) => {
     countParams.push(term, term, term);
   }
 
-  sql += ` GROUP BY u.id ORDER BY u.name ASC LIMIT ? OFFSET ?`;
+  sql += ` GROUP BY u.id, u.name, u.email, u.roll_no, u.phone, u.active, u.created_at, cs.total_score, cs.level ORDER BY u.name ASC LIMIT ? OFFSET ?`;
   params.push(parseInt(limit), offset);
 
   const students = await db.prepare(sql).all(...params);
@@ -520,7 +520,7 @@ router.get('/exams/:id/export', async (req, res) => {
       LEFT JOIN responses r ON r.student_id = u.id AND r.exam_id = ?
       LEFT JOIN scores s ON s.response_id = r.id
       WHERE u.role = 'student'
-      GROUP BY u.id
+      GROUP BY u.id, u.name, u.roll_no, b.name
       ORDER BY u.name ASC
     `).all(examId);
 

@@ -5,7 +5,6 @@
  */
 
 const { Pool } = require('pg');
-const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const { AsyncLocalStorage } = require('async_hooks');
@@ -30,6 +29,7 @@ function getPgPool() {
 
 function getSqliteDb() {
   if (!_sqliteDb) {
+    const Database = require('better-sqlite3');
     const dbPath = process.env.DB_PATH || './data/assessment.db';
     const dir = path.dirname(path.resolve(dbPath));
     if (!fs.existsSync(dir)) {

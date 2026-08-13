@@ -97,6 +97,16 @@ async function handleAccessCodeLogin(e) {
   errEl.style.display = 'none';
 
   try {
+    const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor) && !/Edg/.test(navigator.userAgent);
+    if (!isChrome) {
+      errEl.innerHTML = 'Google Chrome is strictly required for student exams. Redirecting to download...';
+      errEl.style.display = 'block';
+      setTimeout(() => {
+        window.location.href = 'https://www.google.com/chrome/';
+      }, 1500);
+      return;
+    }
+
     btn.disabled = true;
     btn.textContent = 'Verifying Code...';
 
@@ -2223,6 +2233,26 @@ async function renderStudentExam(examId) {
   main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div><p>Starting exam...</p></div>`;
 
 
+  // Enforce Chrome Usage for Students
+  const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor) && !/Edg/.test(navigator.userAgent);
+  if (!isChrome) {
+    main.innerHTML = `
+      <div class="card" style="text-align: center; margin-top: 50px; max-width: 600px; margin-left: auto; margin-right: auto; padding: 32px;">
+        <div style="font-size: 4rem; color: var(--accent-rose); margin-bottom: 16px;"><i class="ph ph-warning-circle"></i></div>
+        <h2 style="color: var(--accent-rose); margin-bottom: 16px;">Google Chrome Required</h2>
+        <p style="margin-bottom: 16px; font-size: 1.05rem; line-height: 1.6;">
+          This exam features advanced oral tasks that rely on Google Chrome's native Speech Recognition engine. 
+          <strong>No browser extension or add-on is required</strong>, but you must use the official <strong>Google Chrome browser</strong> and grant microphone permissions when prompted.
+        </p>
+        <p style="margin-bottom: 24px; color: var(--text-muted);">Please download and install Google Chrome, then log in again to take your exam.</p>
+        <a href="https://www.google.com/chrome/" target="_blank" class="btn btn-primary btn-lg" style="text-decoration: none;">
+          <i class="ph ph-download-simple"></i> Download Google Chrome
+        </a>
+      </div>
+    `;
+    return;
+  }
+
   try {
     const data = await api(`/api/student/exams/${examId}/start`, { method: 'POST' });
     examState.questions = data.questions;
@@ -2499,15 +2529,17 @@ async function submitExam(examId, forceSubmit = false, remarks = null) {
 
 function setupProctoring(examId) {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+  const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor) && !/Edg/.test(navigator.userAgent);
   
-  if (isMobile) {
+  if (isMobile || !isChrome) {
     document.getElementById('main-content').innerHTML = `
-      <div style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.9); color:white; z-index:9999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2rem;">
+      <div style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.92); color:white; z-index:9999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2rem;">
         <h1 style="color:var(--accent-rose); margin-bottom: 1rem;"><i class="ph ph-prohibit"></i> Access Denied</h1>
-        <p style="font-size:1.2rem; max-width: 500px; line-height: 1.5; margin-bottom: 2rem;">
-          Compulsory use of a <strong>Laptop or Desktop computer</strong> is required. Mobile devices are strictly prohibited.
+        <p style="font-size:1.2rem; max-width: 550px; line-height: 1.6; margin-bottom: 2rem;">
+          ${!isChrome ? 'You must use <strong>Google Chrome</strong> to take this exam. No browser extension is required — Chrome includes built-in speech recognition for oral tasks. Please allow microphone permissions when asked.<br><br><a href="https://www.google.com/chrome/" target="_blank" class="btn btn-primary" style="text-decoration:none; margin-bottom:1rem; display:inline-block;"><i class="ph ph-download-simple"></i> Download Google Chrome</a><br><br>' : ''}
+          ${isMobile ? 'Compulsory use of a <strong>Laptop or Desktop computer</strong> is required. Mobile devices are strictly prohibited.' : ''}
         </p>
-        <button class="btn btn-primary" onclick="window.location.hash='#/student/dashboard'">Return to Dashboard</button>
+        <button class="btn btn-secondary" onclick="window.location.hash='#/student/dashboard'">Return to Dashboard</button>
       </div>
     `;
     return false;

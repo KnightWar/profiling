@@ -347,9 +347,9 @@ router.post('/students/bulk-batch', async (req, res) => {
   const db = getDb();
   try {
     const assignTx = db.transaction(async (ids, bId) => {
-      const stmt = await db.prepare('INSERT OR IGNORE INTO student_batches (student_id, batch_id) VALUES (?, ?)');
+      const stmt = db.prepare('INSERT OR IGNORE INTO student_batches (student_id, batch_id) VALUES (?, ?)');
       for (const id of ids) {
-        stmt.run(id, bId);
+        await stmt.run(id, bId);
       }
     });
     await assignTx(student_ids, batch_id);
@@ -367,7 +367,7 @@ router.post('/students/bulk-batch', async (req, res) => {
 // ─── GET /api/admin/components ──────────────────────────────────────────────
 router.get('/components', async (req, res) => {
   const db = getDb();
-  const components = db.prepare('SELECT * FROM components ORDER BY id').all();
+  const components = await db.prepare('SELECT * FROM components ORDER BY id').all();
   res.json({ components });
 });
 
@@ -686,7 +686,7 @@ router.post('/batches/:id/students', async (req, res) => {
 router.get('/exams/:id/batches', async (req, res) => {
   try {
     const db = getDb();
-    const batches = db.prepare(`
+    const batches = await db.prepare(`
       SELECT b.id, b.name, b.description
       FROM batches b
       JOIN exam_batches eb ON eb.batch_id = b.id
@@ -715,8 +715,8 @@ router.post('/exams/:id/batches', async (req, res) => {
 
       for (const bid of batch_ids) {
         // Enforce one exam per batch: remove this batch from any other exams
-        removeBatchFromOtherExams.run(bid);
-        stmt.run(examId, bid);
+        await removeBatchFromOtherExams.run(bid);
+        await stmt.run(examId, bid);
       }
     })();
 

@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const compression = require('compression'); // 1.1 gzip/brotli
 const session = require('express-session');
 const path = require('path');
 const fs = require('fs');
@@ -22,6 +23,9 @@ if (!isPg) {
 }
 
 // ─── Middleware ─────────────────────────────────────────────────────────────
+// 1.1 — Compress all responses (gzip/brotli) before anything else
+app.use(compression());
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -60,11 +64,18 @@ app.use(session({
   },
 }));
 
-// Static files
-app.use(express.static(path.join(__dirname, 'public')));
+// Static files — 1.2: 7-day cache for immutable public assets; etag for revalidation
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '7d',
+  etag: true,
+  lastModified: true,
+}));
 
-// Upload files served statically
-app.use('/uploads', express.static(path.resolve(process.env.UPLOAD_DIR || './uploads')));
+// Upload files served statically — keep short-lived (1 min) so re-uploads are seen quickly
+app.use('/uploads', express.static(path.resolve(process.env.UPLOAD_DIR || './uploads'), {
+  maxAge: '1m',
+  etag: true,
+}));
 
 // ─── Lazy DB Initialization (Serverless Friendly) ───────────────────────────
 let isDbInitialized = false;
@@ -90,17 +101,22 @@ app.use(async (req, res, next) => {
 });
 
 // ─── Single Session Enforcement ──────────────────────────────────────────────
+// 1.4 — Only run the DB round-trip on mutating requests (POST/PUT/PATCH/DELETE).
+// Safe read-only GETs skip the check entirely, slashing per-request DB load.
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
 app.use('/api', async (req, res, next) => {
   // Skip auth routes (login)
   if (req.path === '/auth/login' || req.path === '/auth/access-code-login') {
     return next();
   }
 
-  if (req.session && req.session.userId) {
+  // Only enforce single-session on state-changing requests
+  if (req.session && req.session.userId && MUTATING_METHODS.has(req.method)) {
     try {
       const db = getDb();
       const user = await db.prepare('SELECT active_session_id FROM users WHERE id = ?').get(req.session.userId);
-      
+
       // If user's active session doesn't match this request's session ID, invalidate this session
       if (user && user.active_session_id && user.active_session_id !== req.sessionID) {
         req.session.destroy();

@@ -11,13 +11,57 @@
 const App = {
   user: null,
   currentPage: null,
+  sectionCache: {},
+  apiCache: {},
 };
+
+function invalidateCache() {
+  App.sectionCache = {};
+  App.apiCache = {};
+}
+
+function isGoogleChrome() {
+  const ua = navigator.userAgent || '';
+  const vendor = navigator.vendor || '';
+
+  const isEdge = /Edg\/|EdgA\/|EdgiOS\//i.test(ua);
+  const isOpera = /OPR\/|Opera\//i.test(ua);
+  const isVivaldi = /Vivaldi\//i.test(ua);
+  const isYandex = /YaBrowser\//i.test(ua);
+  const isSamsung = /SamsungBrowser\//i.test(ua);
+  const isUC = /UCBrowser\//i.test(ua);
+  const isFirefox = /Firefox\//i.test(ua);
+  const isSafari = /Safari\//i.test(ua) && !/Chrome\//i.test(ua);
+  const isBrave = (navigator.brave && typeof navigator.brave.isBrave === 'function') || /Brave\//i.test(ua);
+  const isChromiumOnly = /Chromium\//i.test(ua);
+
+  if (isEdge || isOpera || isVivaldi || isYandex || isSamsung || isUC || isFirefox || isSafari || isBrave || isChromiumOnly) {
+    return false;
+  }
+
+  const isChromeUA = /Chrome\//i.test(ua) && /Google Inc/i.test(vendor);
+  if (!isChromeUA) return false;
+
+  if (navigator.userAgentData && Array.isArray(navigator.userAgentData.brands)) {
+    const brands = navigator.userAgentData.brands.map(b => b.brand);
+    const hasEdge = brands.some(b => b.includes('Edge') || b.includes('Microsoft Edge'));
+    const hasOpera = brands.some(b => b.includes('Opera'));
+    const hasBrave = brands.some(b => b.includes('Brave'));
+    if (hasEdge || hasOpera || hasBrave) return false;
+    
+    const hasGoogleChrome = brands.includes('Google Chrome');
+    if (hasGoogleChrome) return true;
+  }
+
+  return true;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // API HELPER
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function api(url, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
   const defaults = {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -36,6 +80,10 @@ async function api(url, options = {}) {
 
   if (!res.ok) {
     throw new Error(data.error || `Request failed (${res.status})`);
+  }
+
+  if (method !== 'GET') {
+    invalidateCache();
   }
 
   return data;
@@ -75,9 +123,58 @@ function showLogin() {
   document.getElementById('login-page').classList.remove('hidden');
   document.getElementById('app-shell').classList.add('hidden');
   toggleLoginView('student');
+
+  const existingWarning = document.getElementById('chrome-warning-banner');
+  if (!isGoogleChrome()) {
+    if (!existingWarning) {
+      const banner = document.createElement('div');
+      banner.id = 'chrome-warning-banner';
+      banner.className = 'form-hint-banner';
+      banner.style.background = 'rgba(244, 63, 94, 0.12)';
+      banner.style.borderColor = 'var(--accent-rose)';
+      banner.style.color = '#fecdd3';
+      banner.innerHTML = '<i class="ph ph-warning-circle" style="color:var(--accent-rose)"></i> <strong>Google Chrome Required:</strong> Official Google Chrome is strictly required for student logins and exams.';
+      const form = document.getElementById('access-code-form');
+      if (form) form.insertBefore(banner, form.firstChild);
+    }
+  } else if (existingWarning) {
+    existingWarning.remove();
+  }
 }
 
 function showApp() {
+  if (App.user && App.user.role === 'student' && !isGoogleChrome()) {
+    document.getElementById('login-page').classList.add('hidden');
+    document.getElementById('app-shell').classList.add('hidden');
+    
+    let errOverlay = document.getElementById('chrome-enforce-overlay');
+    if (!errOverlay) {
+      errOverlay = document.createElement('div');
+      errOverlay.id = 'chrome-enforce-overlay';
+      document.body.appendChild(errOverlay);
+    }
+    errOverlay.style.display = 'block';
+    errOverlay.innerHTML = `
+      <div style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.96); color:white; z-index:99999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2rem;">
+        <div style="font-size: 4rem; color: var(--accent-rose); margin-bottom: 16px;"><i class="ph ph-warning-circle"></i></div>
+        <h1 style="color:var(--accent-rose); margin-bottom: 16px;">Google Chrome Required</h1>
+        <p style="margin-bottom: 16px; font-size: 1.1rem; line-height: 1.6; max-width: 550px; color: var(--text-muted);">
+          Student exam access strictly requires the official <strong>Google Chrome browser</strong>. 
+          No browser extensions or add-ons are needed, but you must take your exam using Google Chrome.
+        </p>
+        <p style="margin-bottom: 24px; color: var(--text-muted);">Please download and install Google Chrome, then log in again.</p>
+        <a href="https://www.google.com/chrome/" target="_blank" class="btn btn-primary btn-lg" style="text-decoration: none; margin-bottom: 16px;">
+          <i class="ph ph-download-simple"></i> Download Google Chrome
+        </a>
+        <button class="btn btn-outline btn-sm" onclick="handleLogout()">Sign Out</button>
+      </div>
+    `;
+    return;
+  }
+
+  const errOverlay = document.getElementById('chrome-enforce-overlay');
+  if (errOverlay) errOverlay.style.display = 'none';
+
   document.getElementById('login-page').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
 
@@ -97,8 +194,7 @@ async function handleAccessCodeLogin(e) {
   errEl.style.display = 'none';
 
   try {
-    const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor) && !/Edg/.test(navigator.userAgent);
-    if (!isChrome) {
+    if (!isGoogleChrome()) {
       errEl.innerHTML = 'Google Chrome is strictly required for student exams. Redirecting to download...';
       errEl.style.display = 'block';
       setTimeout(() => {
@@ -141,6 +237,15 @@ async function handleAccountLogin(e) {
   errEl.style.display = 'none';
 
   try {
+    if (!isGoogleChrome()) {
+      errEl.innerHTML = 'Google Chrome is strictly required for student logins and exams. Redirecting to download...';
+      errEl.style.display = 'block';
+      setTimeout(() => {
+        window.location.href = 'https://www.google.com/chrome/';
+      }, 1500);
+      return;
+    }
+
     btn.disabled = true;
     btn.textContent = 'Signing in...';
 
@@ -151,6 +256,10 @@ async function handleAccountLogin(e) {
       method: 'POST',
       body: { email, password },
     });
+
+    if (data.user.role === 'student' && !isGoogleChrome()) {
+      throw new Error('Google Chrome is strictly required for student logins and exams.');
+    }
 
     App.user = data.user;
     showToast(`Welcome, ${App.user.name}!`, 'success');
@@ -371,18 +480,8 @@ function handleRoute() {
 
   const renderer = ROUTES[routeKey];
   if (renderer) {
-    // Animate main content out then in
-    const main = document.getElementById('main-content');
-    main.style.transition = 'opacity 0.12s ease, transform 0.12s ease';
-    main.style.opacity = '0';
-    main.style.transform = 'translateY(8px)';
-    setTimeout(() => {
-      main.style.opacity = '';
-      main.style.transform = '';
-      main.style.transition = '';
-      const params = hash.replace(routeKey, '').split('/').filter(Boolean);
-      renderer(...params);
-    }, 120);
+    const params = hash.replace(routeKey, '').split('/').filter(Boolean);
+    renderer(...params);
   } else {
     renderNotFound();
   }
@@ -465,15 +564,25 @@ function statusBadge(status) {
 // ADMIN: DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function renderAdminDashboard() {
+async function renderAdminDashboard(isBackground = false) {
   const main = document.getElementById('main-content');
-  main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div><p>Loading dashboard...</p></div>`;
+  const cacheKey = '#/admin/dashboard';
+
+  if (!isBackground && App.sectionCache[cacheKey]) {
+    main.innerHTML = App.sectionCache[cacheKey];
+    renderAdminDashboard(true);
+    return;
+  }
+
+  if (!isBackground && !main.querySelector('.stats-grid')) {
+    main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  }
 
   try {
     const data = await api('/api/admin/dashboard');
     const s = data.stats;
 
-    main.innerHTML = `
+    const html = `
       <div class="page-header">
         <div>
           <h1><i class="ph ph-chart-bar"></i> Dashboard</h1>
@@ -542,7 +651,6 @@ async function renderAdminDashboard() {
                 const total = data.levelDistribution.reduce((a, b) => a + b.count, 0);
                 const pct = total ? Math.round(count / total * 100) : 0;
                 const labels = { 3: 'Advanced', 2: 'Intermediate', 1: 'Foundational' };
-                const colors = { 3: 'success', 2: 'warning', 1: 'var(--accent-rose)' };
                 return `
                   <div>
                     <div class="flex justify-between mb-sm">
@@ -580,8 +688,11 @@ async function renderAdminDashboard() {
         </div>
       </div>
     `;
+
+    main.innerHTML = html;
+    App.sectionCache[cacheKey] = html;
   } catch (err) {
-    main.innerHTML = `<div class="empty-state"><h3>Error loading dashboard</h3><p>${err.message}</p></div>`;
+    if (!isBackground) main.innerHTML = `<div class="empty-state"><h3>Error loading dashboard</h3><p>${err.message}</p></div>`;
   }
 }
 
@@ -589,9 +700,19 @@ async function renderAdminDashboard() {
 // ADMIN: STUDENT MANAGER
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function renderStudentManager() {
+async function renderStudentManager(isBackground = false) {
   const main = document.getElementById('main-content');
-  main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  const cacheKey = '#/admin/students';
+
+  if (!isBackground && App.sectionCache[cacheKey]) {
+    main.innerHTML = App.sectionCache[cacheKey];
+    renderStudentManager(true);
+    return;
+  }
+
+  if (!isBackground && !main.querySelector('.data-table')) {
+    main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  }
 
   try {
     const [data, batchesData] = await Promise.all([
@@ -601,7 +722,7 @@ async function renderStudentManager() {
 
     const batchOptions = batchesData.batches.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
 
-    main.innerHTML = `
+    const html = `
       <div class="page-header">
         <div>
           <h1><i class="ph ph-users"></i> Student Manager</h1>
@@ -675,8 +796,11 @@ async function renderStudentManager() {
         </div>
       </div>
     `;
+
+    main.innerHTML = html;
+    App.sectionCache[cacheKey] = html;
   } catch (err) {
-    main.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
+    if (!isBackground) main.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
   }
 }
 
@@ -1019,9 +1143,12 @@ async function submitResetStudentExams(id) {
 // ADMIN: EXAM MANAGER
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function renderExamManager() {
+async function renderExamManager(isBackground = false) {
   const main = document.getElementById('main-content');
-  main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  const hasExistingTable = main.querySelector('.data-table');
+  if (!isBackground || !hasExistingTable) {
+    main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  }
 
   try {
     const [examData, compData] = await Promise.all([
@@ -1102,7 +1229,7 @@ async function renderExamManager() {
       `).join('')}
     `;
   } catch (err) {
-    main.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
+    if (!isBackground) main.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
   }
 }
 
@@ -1110,7 +1237,7 @@ async function generateExamAccessCode(examId) {
   try {
     const res = await api(`/api/admin/exams/${examId}/access-code`, { method: 'POST' });
     showToast(`Access code generated: ${res.access_code}`, 'success');
-    renderExamManager();
+    renderExamManager(true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1154,7 +1281,7 @@ async function saveExamTime(examId) {
     });
     showToast('Exam time updated successfully', 'success');
     closeModal();
-    renderExamManager();
+    renderExamManager(true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1211,7 +1338,7 @@ async function saveExamBatches(examId) {
     });
     showToast('Batches assigned to exam successfully', 'success');
     closeModal();
-    // Optional: reload exam manager if we displayed batch info there
+    renderExamManager(true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1224,7 +1351,7 @@ async function toggleExamTimer(examId, currentTimerEnabled) {
       body: { timer_enabled: !currentTimerEnabled },
     });
     showToast(currentTimerEnabled ? 'Timer disabled for exam' : 'Timer enabled for exam', 'info');
-    renderExamManager();
+    renderExamManager(true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1237,7 +1364,7 @@ async function togglePublish(examId, current) {
       body: { is_published: !current },
     });
     showToast(current ? 'Exam unpublished' : 'Exam published', 'success');
-    renderExamManager();
+    renderExamManager(true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1247,16 +1374,31 @@ async function togglePublish(examId, current) {
 // ADMIN: QUESTION MANAGER (Manual + AI Generation)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function renderQuestionManager() {
+async function renderQuestionManager(isBackground = false) {
   const main = document.getElementById('main-content');
-  main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  const cacheKey = '#/admin/questions';
+
+  if (!isBackground && App.sectionCache[cacheKey]) {
+    main.innerHTML = App.sectionCache[cacheKey];
+    const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    const selectedExamId = urlParams.get('exam') || '';
+    if (selectedExamId) {
+      loadExamQuestions(selectedExamId, true);
+    }
+    renderQuestionManager(true);
+    return;
+  }
+
+  if (!isBackground && !main.querySelector('#qm-exam-select')) {
+    main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  }
 
   try {
     const examData = await api('/api/admin/exams');
     const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
     const selectedExamId = urlParams.get('exam') || '';
 
-    main.innerHTML = `
+    const html = `
       <div class="page-header">
         <div>
           <h1><i class="ph ph-question"></i> Question Manager</h1>
@@ -1281,22 +1423,30 @@ async function renderQuestionManager() {
       <div id="qm-content"></div>
     `;
 
+    main.innerHTML = html;
+    App.sectionCache[cacheKey] = html;
+
     if (selectedExamId) {
       loadExamQuestions(selectedExamId);
     }
   } catch (err) {
-    main.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
+    if (!isBackground) main.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
   }
 }
 
-async function loadExamQuestions(examId) {
+async function loadExamQuestions(examId, isBackground = false) {
   if (!examId) {
-    document.getElementById('qm-content').innerHTML = '';
+    const contentEl = document.getElementById('qm-content');
+    if (contentEl) contentEl.innerHTML = '';
     return;
   }
 
   const container = document.getElementById('qm-content');
-  container.innerHTML = `<div class="loading-overlay"><div class="spinner"></div></div>`;
+  const activeTabName = container.querySelector('.tab.active')?.dataset?.tab || 'qm-existing';
+
+  if (!isBackground || !container.querySelector('.data-table')) {
+    container.innerHTML = `<div class="loading-overlay"><div class="spinner"></div></div>`;
+  }
 
   try {
     const data = await api(`/api/admin/exams/${examId}/questions`);
@@ -1431,7 +1581,7 @@ async function loadExamQuestions(examId) {
       </div>
 
       <!-- TAB: AI Generate -->
-      <div class="tab-content" id="qm-ai">
+      <div class="tab-content ${activeTabName === 'qm-ai' ? 'active' : ''}" id="qm-ai">
         <div class="card">
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
             <span style="font-size:1.3rem;"><i class="ph ph-robot"></i></span>
@@ -1473,7 +1623,7 @@ async function loadExamQuestions(examId) {
       </div>
 
       <!-- TAB: Upload File -->
-      <div class="tab-content" id="qm-upload">
+      <div class="tab-content ${activeTabName === 'qm-upload' ? 'active' : ''}" id="qm-upload">
         <div class="card">
           <p class="text-sm text-muted mb-sm">Upload questions from Excel (.xlsx), CSV (.csv), or JSON (.json) file.</p>
           <p class="text-sm text-muted mb-md">Expected columns: <strong>question, type, Option A, Option B, Option C, Option D, Correct Answer, marks, difficulty</strong></p>
@@ -1521,10 +1671,16 @@ function updateManualForm() {
 async function submitManualQuestion(examId) {
   try {
     const type = document.getElementById('mq-type').value;
+    const content = document.getElementById('mq-content').value;
+
+    if (!content.trim()) return showToast('Please enter question content', 'warning');
+
+    if (!confirm('Are you sure you want to add this question to the exam?')) return;
+
     const body = {
       type,
       marks: parseInt(document.getElementById('mq-marks').value),
-      content: document.getElementById('mq-content').value,
+      content,
       difficulty: document.getElementById('mq-difficulty').value,
     };
 
@@ -1542,7 +1698,7 @@ async function submitManualQuestion(examId) {
 
     await api(`/api/admin/exams/${examId}/questions`, { method: 'POST', body });
     showToast('Question added', 'success');
-    loadExamQuestions(examId);
+    loadExamQuestions(examId, true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1635,13 +1791,15 @@ async function saveGeneratedQuestions(examId) {
 
   if (selected.length === 0) return showToast('No questions selected', 'warning');
 
+  if (!confirm(`Are you sure you want to save ${selected.length} AI-generated questions to the exam?`)) return;
+
   try {
     await api(`/api/admin/exams/${examId}/questions/save-generated`, {
       method: 'POST',
       body: { questions: selected },
     });
     showToast(`Saved ${selected.length} AI-generated questions`, 'success');
-    loadExamQuestions(examId);
+    loadExamQuestions(examId, true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1657,7 +1815,7 @@ async function uploadQuestions(examId) {
   try {
     const data = await api(`/api/admin/exams/${examId}/questions/upload`, { method: 'POST', body: formData });
     showToast(data.message, 'success');
-    loadExamQuestions(examId);
+    loadExamQuestions(examId, true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1692,6 +1850,15 @@ async function editExistingQuestion(qId, examId) {
     const data = await api(`/api/admin/exams/${examId}/questions`);
     const q = data.questions.find(x => x.id === qId);
     if (!q) return;
+
+    window.__editingQuestionOriginal = {
+      type: q.type,
+      marks: q.marks,
+      difficulty: q.difficulty || 'medium',
+      content: q.content,
+      options: q.options ? [...q.options] : [],
+      correct_answer: q.correct_answer || ''
+    };
 
     let editHtml = `
       <form id="edit-question-form-${qId}">
@@ -1776,32 +1943,54 @@ function toggleEditOptions(type) {
 async function saveEditedQuestion(qId, examId) {
   try {
     const type = document.getElementById('edit-q-type').value;
-    const payload = {
-      type,
-      marks: parseInt(document.getElementById('edit-q-marks').value, 10),
-      difficulty: document.getElementById('edit-q-difficulty').value,
-      content: document.getElementById('edit-q-content').value
-    };
+    const marks = parseInt(document.getElementById('edit-q-marks').value, 10);
+    const difficulty = document.getElementById('edit-q-difficulty').value;
+    const content = document.getElementById('edit-q-content').value;
 
+    let opts = [];
+    let correct = '';
     if (type === 'mcq') {
-      const opts = [
+      opts = [
         document.getElementById('edit-q-opt-0').value,
         document.getElementById('edit-q-opt-1').value,
         document.getElementById('edit-q-opt-2').value,
         document.getElementById('edit-q-opt-3').value
       ].filter(o => o.trim() !== '');
       if (opts.length < 2) throw new Error('At least 2 options required for MCQ');
-      payload.options = opts;
-      payload.correct_answer = document.getElementById('edit-q-correct').value;
+      correct = document.getElementById('edit-q-correct').value;
     } else {
-      payload.options = [];
-      payload.correct_answer = document.getElementById('edit-q-correct-text').value;
+      opts = [];
+      correct = document.getElementById('edit-q-correct-text').value;
+    }
+
+    const payload = { type, marks, difficulty, content, options: opts, correct_answer: correct };
+
+    // Check if question is already saved with identical content
+    if (window.__editingQuestionOriginal) {
+      const orig = window.__editingQuestionOriginal;
+      const isUnchanged =
+        payload.type === orig.type &&
+        payload.marks === orig.marks &&
+        payload.difficulty === orig.difficulty &&
+        payload.content.trim() === orig.content.trim() &&
+        JSON.stringify(payload.options) === JSON.stringify(orig.options) &&
+        payload.correct_answer.trim() === orig.correct_answer.trim();
+
+      if (isUnchanged) {
+        showToast('No changes detected — question is already saved.', 'info');
+        closeModal();
+        return;
+      }
+    }
+
+    if (!confirm('Are you sure you want to save the changes to this question?')) {
+      return;
     }
 
     await api(`/api/admin/questions/${qId}`, { method: 'PUT', body: payload });
     showToast('Question updated', 'success');
     closeModal();
-    loadExamQuestions(examId);
+    loadExamQuestions(examId, true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1812,7 +2001,7 @@ async function deleteQuestion(qId, examId) {
   try {
     await api(`/api/admin/questions/${qId}`, { method: 'DELETE' });
     showToast('Question deleted', 'success');
-    loadExamQuestions(examId);
+    loadExamQuestions(examId, true);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1872,15 +2061,25 @@ async function bulkDeleteQuestions(examId) {
 // ADMIN: SCORE REPORTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function renderScoreReports() {
+async function renderScoreReports(isBackground = false) {
   const main = document.getElementById('main-content');
-  main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  const cacheKey = '#/admin/scores';
+
+  if (!isBackground && App.sectionCache[cacheKey]) {
+    main.innerHTML = App.sectionCache[cacheKey];
+    renderScoreReports(true);
+    return;
+  }
+
+  if (!isBackground && !main.querySelector('.data-table')) {
+    main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  }
 
   try {
     const data = await api('/api/scores/all');
     const s = data.summary;
 
-    main.innerHTML = `
+    const html = `
       <div class="page-header">
         <div>
           <h1><i class="ph ph-trend-up"></i> Scores & Reports</h1>
@@ -1962,8 +2161,11 @@ async function renderScoreReports() {
         </div>
       </div>
     `;
+
+    main.innerHTML = html;
+    App.sectionCache[cacheKey] = html;
   } catch (err) {
-    main.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
+    if (!isBackground) main.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
   }
 }
 
@@ -1982,14 +2184,24 @@ async function recomputeAll() {
 // EVALUATOR QUEUE (shared by admin + evaluator)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function renderEvaluatorQueue() {
+async function renderEvaluatorQueue(isBackground = false) {
   const main = document.getElementById('main-content');
-  main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  const cacheKey = '#/evaluator/queue';
+
+  if (!isBackground && App.sectionCache[cacheKey]) {
+    main.innerHTML = App.sectionCache[cacheKey];
+    renderEvaluatorQueue(true);
+    return;
+  }
+
+  if (!isBackground && !main.querySelector('.table-container')) {
+    main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  }
 
   try {
     const data = await api('/api/evaluator/queue');
 
-    main.innerHTML = `
+    const html = `
       <div class="page-header">
         <div>
           <h1><i class="ph ph-check-circle"></i> Evaluator Queue</h1>
@@ -2034,8 +2246,11 @@ async function renderEvaluatorQueue() {
         </div>
       `}
     `;
+
+    main.innerHTML = html;
+    App.sectionCache[cacheKey] = html;
   } catch (err) {
-    main.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
+    if (!isBackground) main.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
   }
 }
 
@@ -2105,14 +2320,24 @@ async function submitScore(responseId) {
   }
 }
 
-async function renderEvaluatorStats() {
+async function renderEvaluatorStats(isBackground = false) {
   const main = document.getElementById('main-content');
-  main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  const cacheKey = '#/evaluator/stats';
+
+  if (!isBackground && App.sectionCache[cacheKey]) {
+    main.innerHTML = App.sectionCache[cacheKey];
+    renderEvaluatorStats(true);
+    return;
+  }
+
+  if (!isBackground && !main.querySelector('.data-table')) {
+    main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  }
 
   try {
     const data = await api('/api/evaluator/stats');
 
-    main.innerHTML = `
+    const html = `
       <div class="page-header">
         <div><h1><i class="ph ph-chart-bar"></i> Evaluator Stats</h1></div>
       </div>
@@ -2136,8 +2361,11 @@ async function renderEvaluatorStats() {
         </div>
       </div>
     `;
+
+    main.innerHTML = html;
+    App.sectionCache[cacheKey] = html;
   } catch (err) {
-    main.innerHTML = `<div class="empty-state"><p>${err.message}</p></div>`;
+    if (!isBackground) main.innerHTML = `<div class="empty-state"><p>${err.message}</p></div>`;
   }
 }
 
@@ -2145,9 +2373,19 @@ async function renderEvaluatorStats() {
 // STUDENT: DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function renderStudentDashboard() {
+async function renderStudentDashboard(isBackground = false) {
   const main = document.getElementById('main-content');
-  main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  const cacheKey = '#/student/dashboard';
+
+  if (!isBackground && App.sectionCache[cacheKey]) {
+    main.innerHTML = App.sectionCache[cacheKey];
+    renderStudentDashboard(true);
+    return;
+  }
+
+  if (!isBackground && !main.querySelector('.card')) {
+    main.innerHTML = `<div class="loading-overlay"><div class="spinner spinner-lg"></div></div>`;
+  }
 
   try {
     const data = await api('/api/student/exams');
@@ -2164,7 +2402,7 @@ async function renderStudentDashboard() {
       componentMap[e.component_key].exams.push(e);
     });
 
-    main.innerHTML = `
+    const html = `
       <div class="page-header">
         <div>
           <h1><i class="ph ph-chart-bar"></i> My Exams</h1>
@@ -2180,21 +2418,55 @@ async function renderStudentDashboard() {
           <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:var(--sp-md);">
             ${comp.exams.map((e, idx) => {
               const status = e.session_status || 'not_started';
-              const statusLabel = status === 'submitted' ? 'Completed' : status === 'active' ? 'In Progress' : 'Not Started';
-              const statusCls = status === 'submitted' ? 'success' : status === 'active' ? 'warning' : 'neutral';
+              const isExpired = e.is_expired;
+              const isNotScheduled = (e.question_count === 0 || !e.is_published);
+              
+              let statusLabel = 'Not Started';
+              let statusCls = 'neutral';
+              if (status === 'submitted') {
+                statusLabel = 'Completed';
+                statusCls = 'success';
+              } else if (isExpired) {
+                statusLabel = 'Access Expired';
+                statusCls = 'danger';
+              } else if (isNotScheduled) {
+                statusLabel = 'Not Scheduled';
+                statusCls = 'neutral';
+              } else if (status === 'active') {
+                statusLabel = 'In Progress';
+                statusCls = 'warning';
+              }
+
+              const isTargetMatch = e.target_match;
+
               return `
-                <div class="card animate-slide-up" style="padding:var(--sp-md); animation-delay: ${idx * 0.05}s;">
+                <div class="card animate-slide-up" style="padding:var(--sp-md); animation-delay: ${idx * 0.05}s; ${isTargetMatch ? 'border: 2px solid var(--accent-indigo);' : ''}">
                   <div class="flex justify-between items-center mb-sm">
-                    <h4>${e.title}</h4>
+                    <h4>${e.title} ${isTargetMatch ? '<span class="badge badge-primary">Current Session</span>' : ''}</h4>
                     <span class="badge badge-${statusCls}">${statusLabel}</span>
                   </div>
                   <p class="text-sm text-muted mb-sm">${e.question_count} questions · ${e.total_marks} marks · ${e.duration_minutes} min</p>
                   ${status === 'submitted' ? `
-                    <p class="text-sm"><span class="font-mono" style="color:var(--accent-emerald);">${e.marks_obtained}/${e.total_marks}</span></p>
+                    <p class="text-sm mb-sm"><span class="font-mono" style="color:var(--accent-emerald);">Score: ${e.marks_obtained}/${e.total_marks}</span></p>
+                    <button class="btn btn-outline btn-sm w-full mt-sm" onclick="window.location.hash='#/student/results'">
+                      <i class="ph ph-trend-up"></i> View Score & Analytics
+                    </button>
+                  ` : isExpired ? `
+                    ${e.marks_obtained > 0 ? `<p class="text-sm mb-sm"><span class="font-mono" style="color:var(--text-muted);">Score: ${e.marks_obtained}/${e.total_marks}</span></p>` : ''}
+                    <div style="font-size:0.85rem; color:var(--accent-rose); margin-bottom:8px;">
+                      <i class="ph ph-clock-afternoon"></i> Access code or exam time limit has expired. Exam taking closed.
+                    </div>
+                    <button class="btn btn-outline btn-sm w-full mt-sm" onclick="window.location.hash='#/student/results'">
+                      <i class="ph ph-trend-up"></i> View Score & Analytics
+                    </button>
+                  ` : isNotScheduled ? `
+                    <button class="btn btn-neutral btn-sm w-full mt-sm" disabled style="opacity:0.65; cursor:not-allowed;">
+                      <i class="ph ph-clock"></i> Exam Not Scheduled
+                    </button>
                   ` : `
                     <button class="btn ${status === 'active' ? 'btn-success' : 'btn-primary'} btn-sm w-full mt-sm"
                       onclick="window.location.hash='#/student/exam/${e.id}'">
-                      ${status === 'active' ? '▶ Continue' : '▶ Start Exam'}
+                      ${status === 'active' ? '▶ Continue Exam' : '▶ Start Exam'}
                     </button>
                   `}
                 </div>
@@ -2214,8 +2486,11 @@ async function renderStudentDashboard() {
         </div>
       ` : ''}
     `;
+
+    main.innerHTML = html;
+    App.sectionCache[cacheKey] = html;
   } catch (err) {
-    main.innerHTML = `<div class="empty-state"><p>${err.message}</p></div>`;
+    if (!isBackground) main.innerHTML = `<div class="empty-state"><p>${err.message}</p></div>`;
   }
 }
 
@@ -2234,8 +2509,7 @@ async function renderStudentExam(examId) {
 
 
   // Enforce Chrome Usage for Students
-  const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor) && !/Edg/.test(navigator.userAgent);
-  if (!isChrome) {
+  if (!isGoogleChrome()) {
     main.innerHTML = `
       <div class="card" style="text-align: center; margin-top: 50px; max-width: 600px; margin-left: auto; margin-right: auto; padding: 32px;">
         <div style="font-size: 4rem; color: var(--accent-rose); margin-bottom: 16px;"><i class="ph ph-warning-circle"></i></div>
@@ -2255,6 +2529,17 @@ async function renderStudentExam(examId) {
 
   try {
     const data = await api(`/api/student/exams/${examId}/start`, { method: 'POST' });
+    if (!data.questions || data.questions.length === 0) {
+      main.innerHTML = `
+        <div class="card" style="text-align: center; margin-top: 50px; max-width: 600px; margin-left: auto; margin-right: auto; padding: 32px;">
+          <div style="font-size: 4rem; color: var(--accent-amber); margin-bottom: 16px;"><i class="ph ph-clock"></i></div>
+          <h2 style="color: var(--text-primary); margin-bottom: 16px;">Exam Not Scheduled</h2>
+          <p style="margin-bottom: 24px; color: var(--text-muted);">This exam session has no questions scheduled yet. Please check back later or contact your administrator.</p>
+          <a href="#/student/dashboard" class="btn btn-outline btn-lg"><i class="ph ph-arrow-left"></i> Return to Dashboard</a>
+        </div>
+      `;
+      return;
+    }
     examState.questions = data.questions;
     examState.responses = data.responses || {};
     examState.session = data.session;
@@ -2529,7 +2814,7 @@ async function submitExam(examId, forceSubmit = false, remarks = null) {
 
 function setupProctoring(examId) {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
-  const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor) && !/Edg/.test(navigator.userAgent);
+  const isChrome = isGoogleChrome();
   
   if (isMobile || !isChrome) {
     document.getElementById('main-content').innerHTML = `

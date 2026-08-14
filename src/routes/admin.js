@@ -171,11 +171,35 @@ router.post('/students/bulk', upload.single('file'), async (req, res) => {
     let skipped = 0;
     const errors = [];
 
-    db.transaction(async () => {
-      for (const s of students) {
+    // 1.5 — Pre-fetch all existing roll_nos and emails in ONE query instead of
+    //        N per-row SELECTs (eliminates the N+1 pattern for large imports).
+    const cleanStudents = students.map(s => ({
+      ...s,
+      cleanRoll: (s.roll_no || '').trim(),
+      cleanEmail: (s.email || '').toLowerCase().trim(),
+    }));
+
+    const rolls = cleanStudents.map(s => s.cleanRoll).filter(Boolean);
+    const emails = cleanStudents.map(s => s.cleanEmail).filter(Boolean);
+
+    let existingRolls = new Set();
+    let existingEmails = new Set();
+
+    if (rolls.length > 0) {
+      const placeholdersR = rolls.map(() => '?').join(',');
+      const existingRows = await db.prepare(
+        `SELECT roll_no, email FROM users WHERE LOWER(roll_no) IN (${placeholdersR}) OR LOWER(email) IN (${rolls.map(() => '?').join(',')})`
+      ).all(...rolls.map(r => r.toLowerCase()), ...emails.map(e => e.toLowerCase()));
+      existingRows.forEach(row => {
+        if (row.roll_no) existingRolls.add((row.roll_no || '').toLowerCase());
+        if (row.email)   existingEmails.add((row.email || '').toLowerCase());
+      });
+    }
+
+    await db.transaction(async () => {
+      for (const s of cleanStudents) {
         try {
-          const cleanRoll = (s.roll_no || '').trim();
-          const cleanEmail = (s.email || '').toLowerCase().trim();
+          const { cleanRoll, cleanEmail } = s;
 
           if (!cleanRoll) {
             skipped++;
@@ -183,19 +207,17 @@ router.post('/students/bulk', upload.single('file'), async (req, res) => {
           }
 
           let studentId = null;
-          const existing = await db.prepare(
-            'SELECT id FROM users WHERE LOWER(roll_no) = ? OR LOWER(email) = ?'
-          ).get(cleanRoll.toLowerCase(), cleanEmail);
 
-          if (existing) {
-            studentId = existing.id;
+          if (existingRolls.has(cleanRoll.toLowerCase()) || existingEmails.has(cleanEmail.toLowerCase())) {
             skipped++;
+            // We don't have the id here; skip batch assignment for duplicates
+            continue;
           } else {
             const hash = bcrypt.hashSync(s.password || 'student123', 10);
-            const res = await db.prepare(
+            const result = await db.prepare(
               'INSERT INTO users (name, email, password_hash, role, roll_no, phone) VALUES (?, ?, ?, ?, ?, ?)'
-            ).run(s.name || cleanRoll, cleanEmail, hash, 'student', cleanRoll, s.phone || null);
-            studentId = res.lastInsertRowid;
+            ).run(s.name || cleanRoll, cleanEmail || `${cleanRoll.toLowerCase()}@student.local`, hash, 'student', cleanRoll, s.phone || null);
+            studentId = result.lastInsertRowid;
             created++;
           }
 
@@ -346,13 +368,13 @@ router.post('/students/bulk-batch', async (req, res) => {
 
   const db = getDb();
   try {
-    const assignTx = db.transaction(async (ids, bId) => {
-      const stmt = db.prepare('INSERT OR IGNORE INTO student_batches (student_id, batch_id) VALUES (?, ?)');
-      for (const id of ids) {
-        await stmt.run(id, bId);
-      }
-    });
-    await assignTx(student_ids, batch_id);
+    // 1.6 — Replace N single INSERTs with one multi-row INSERT statement.
+    // For SQLite/PG both, build VALUES (?,?),(?,?),... in one round-trip.
+    const placeholders = student_ids.map(() => '(?, ?)').join(', ');
+    const params = student_ids.flatMap(id => [id, batch_id]);
+    await db.prepare(
+      `INSERT OR IGNORE INTO student_batches (student_id, batch_id) VALUES ${placeholders}`
+    ).run(...params);
     res.json({ message: `Successfully assigned ${student_ids.length} students to batch` });
   } catch (err) {
     console.error('Bulk batch assign error:', err);

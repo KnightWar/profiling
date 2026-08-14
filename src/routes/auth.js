@@ -5,6 +5,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { getDb } = require('../db/database');
+const { isChromeUserAgent } = require('../utils/browser-check');
 
 const router = express.Router();
 
@@ -27,6 +28,10 @@ router.post('/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    if (user.role === 'student' && !isChromeUserAgent(req.headers['user-agent'])) {
+      return res.status(403).json({ error: 'Google Chrome is strictly required for student logins and exams.' });
     }
 
     // Set session
@@ -57,6 +62,10 @@ router.post('/login', async (req, res) => {
 // ─── POST /api/auth/access-code-login ──────────────────────────────────────
 router.post('/access-code-login', async (req, res) => {
   try {
+    if (!isChromeUserAgent(req.headers['user-agent'])) {
+      return res.status(403).json({ error: 'Google Chrome is strictly required for student logins and exams.' });
+    }
+
     const { roll_no, access_code } = req.body;
 
     if (!roll_no || !access_code) {

@@ -6,11 +6,18 @@ const express = require('express');
 const { getDb } = require('../db/database');
 const { requireRole } = require('../middleware/roles');
 const { autoGradeResponse, recomputeAllForStudent } = require('../services/scoring');
+const { isChromeUserAgent } = require('../utils/browser-check');
 
 const router = express.Router();
 
-// All routes require student role
+// All routes require student role & Google Chrome browser
 router.use(requireRole('student'));
+router.use((req, res, next) => {
+  if (!isChromeUserAgent(req.headers['user-agent'])) {
+    return res.status(403).json({ error: 'Google Chrome is strictly required for student logins and exams.' });
+  }
+  next();
+});
 
 // ─── GET /api/student/exams ─────────────────────────────────────────────────
 // List available exams for this student
@@ -18,8 +25,9 @@ router.get('/exams', async (req, res, next) => {
   try {
     const db = getDb();
     const studentId = req.user.id;
+    const targetExamId = req.session.targetExamId || null;
 
-    const exams = await db.prepare(`
+    const rawExams = await db.prepare(`
       SELECT e.*, c.display_name as component_name, c.name as component_key, c.weight,
              es.status as session_status, es.started_at as session_started, es.ends_at as session_ends,
              es.submitted_at as session_submitted,
@@ -33,6 +41,20 @@ router.get('/exams', async (req, res, next) => {
       WHERE e.is_published = 1
       ORDER BY c.id, e.exam_number
     `).all(studentId, studentId);
+
+    const now = new Date();
+    const exams = rawExams.map(e => {
+      const accessCodeExpired = e.access_code_expires_at ? now > new Date(e.access_code_expires_at) : false;
+      const sessionExpired = e.session_ends ? now > new Date(e.session_ends) && e.session_status !== 'submitted' : false;
+      const isExpired = accessCodeExpired || sessionExpired;
+
+      return {
+        ...e,
+        is_access_code_expired: accessCodeExpired,
+        is_expired: isExpired,
+        target_match: targetExamId ? Number(targetExamId) === Number(e.id) : true,
+      };
+    });
 
     res.json({ exams });
   } catch (err) {
@@ -53,11 +75,21 @@ router.post('/exams/:id/start', async (req, res, next) => {
       return res.status(404).json({ error: 'Exam not found or not published' });
     }
 
+    const now = new Date();
+
+    // Check if access code is expired
+    if (exam.access_code_expires_at && now > new Date(exam.access_code_expires_at)) {
+      return res.status(403).json({ error: 'This exam access code has expired. Exam access is closed.' });
+    }
+
     // Check for existing session
     const existing = await db.prepare('SELECT * FROM exam_sessions WHERE student_id = ? AND exam_id = ?').get(studentId, examId);
     if (existing) {
       if (existing.status === 'submitted') {
         return res.status(400).json({ error: 'Exam already submitted' });
+      }
+      if (existing.ends_at && now > new Date(existing.ends_at)) {
+        return res.status(403).json({ error: 'Exam session duration has ended and time has expired.' });
       }
       if (existing.status === 'active') {
         // Return existing session
@@ -88,8 +120,7 @@ router.post('/exams/:id/start', async (req, res, next) => {
       }
     }
 
-    // Create new session
-    const now = new Date();
+    // Create new session (reuse `now` declared above)
     const endsAt = new Date(now.getTime() + exam.duration_minutes * 60 * 1000);
 
     const result = await db.prepare(`

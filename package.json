@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "build": "node scripts/build.js",
+    "build:watch": "node scripts/build.js --watch",
     "seed": "node src/db/seed-runner.js",
     "test": "node --test src/tests/*.test.js"
   },
@@ -26,5 +28,8 @@
   "optionalDependencies": {
     "better-sqlite3": "^11.7.0",
     "connect-sqlite3": "^0.9.15"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
   }
 }

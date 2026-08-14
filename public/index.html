@@ -146,10 +146,19 @@
   <div class="toast-container" id="toast-container"></div>
 
   <!-- Scripts -->
-  <!-- 1.3: pinned to specific versions + defer so they never block initial paint -->
+  <!-- Pinned to specific versions + defer so they never block initial paint -->
   <script src="https://unpkg.com/@phosphor-icons/web@2.1.1" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
-  <script src="/js/app.js" defer></script>
+  <!--
+    core.js: auth, router, toast, api helper, modal — loaded for all roles.
+    After login, core.js dynamically injects the role-specific script:
+      admin    → /dist/admin.js + /dist/evaluator.js
+      student  → /dist/student.js
+      evaluator → /dist/evaluator.js
+    Run `npm run build` to generate minified files in public/dist/.
+    In development, load unminified sources directly:
+  -->
+  <script src="/dist/core.js" defer></script>
 </body>
 
 </html>

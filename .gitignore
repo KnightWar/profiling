@@ -3,3 +3,7 @@ data/
 uploads/
 .env
 *.db
+
+# Built frontend bundles (run `npm run build` to regenerate)
+public/dist/*.js
+!public/dist/.gitkeep

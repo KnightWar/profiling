@@ -449,7 +449,14 @@ function clearSaveErrorBanner() {
 function startExamTimer(endsAt) {
   if (examState.timerInterval) clearInterval(examState.timerInterval);
 
+  let ticks = 0;
   examState.timerInterval = setInterval(() => {
+    ticks++;
+    if (ticks % 15 === 0) {
+      // Ping the server every 15s to check authorization and active exam status
+      api('/api/auth/me').catch(() => {});
+    }
+
     const diff = Math.max(0, new Date(endsAt) - new Date());
     const mins = Math.floor(diff / 60000);
     const secs = Math.floor((diff % 60000) / 1000);

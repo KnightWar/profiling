@@ -92,7 +92,12 @@ async function api(url, options = {}) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(data.error || `Request failed (${res.status})`);
+    if (res.status === 401 && (data.error === 'UNAUTHORIZED_STUDENT' || data.error === 'EXAM_UNAVAILABLE')) {
+      handleLogout(data.error);
+    }
+    const err = new Error(data.error || `Request failed (${res.status})`);
+    err.code = data.error;
+    throw err;
   }
 
   if (method !== 'GET') {
@@ -410,7 +415,7 @@ function toggleLoginView(view) {
   }, 160);
 }
 
-async function handleLogout() {
+async function handleLogout(reason) {
   try {
     await api('/api/auth/logout', { method: 'POST' });
   } catch {}
@@ -418,7 +423,21 @@ async function handleLogout() {
   App._roleModuleLoaded = false;
   window.location.hash = '';
   showLogin();
-  showToast('Signed out', 'info');
+
+  if (reason === 'UNAUTHORIZED_STUDENT' || reason === 'EXAM_UNAVAILABLE') {
+    const lockOverlay = document.getElementById('student-login-lock-overlay');
+    if (lockOverlay) {
+      lockOverlay.style.display = 'flex';
+      const msg = lockOverlay.querySelector('p');
+      if (msg && reason === 'EXAM_UNAVAILABLE') {
+        msg.innerHTML = 'The exam is no longer active or the access code is invalid.<br>Please contact your administrator.';
+      } else if (msg) {
+        msg.innerHTML = 'You are not authorized to access this exam.<br>Please contact your administrator.';
+      }
+    }
+  } else {
+    showToast('Signed out', 'info');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

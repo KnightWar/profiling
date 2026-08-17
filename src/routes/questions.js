@@ -216,7 +216,7 @@ router.post('/exams/:id/questions/save-generated', async (req, res, next) => {
       return res.status(400).json({ error: 'questions array required' });
     }
 
-    const saveAll = db.transaction(async () => {
+    try {
       // Optionally clear existing questions
       if (clearExisting) {
         await db.prepare('DELETE FROM questions WHERE exam_id = ?').run(req.params.id);
@@ -247,11 +247,11 @@ router.post('/exams/:id/questions/save-generated', async (req, res, next) => {
         );
         count++;
       }
-      return count;
-    });
-
-    const count = await saveAll();
-    res.json({ message: `Saved ${count} AI-generated questions`, count });
+      res.json({ message: 'Questions saved successfully', count });
+    } catch (dbErr) {
+      console.error('Error saving generated questions:', dbErr);
+      res.status(500).json({ error: `Failed to save generated questions: ${dbErr.message}` });
+    }
   } catch (err) {
     next(err);
   }

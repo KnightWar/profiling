@@ -1194,23 +1194,60 @@ async function generateAIQuestions(examId) {
 
     preview.innerHTML = `
       <div class="card-header">
-        <h4>Generated ${data.questions.length} Questions — Review & Save</h4>
+        <h4>Generated ${data.questions.length} Questions — Review & Edit</h4>
       </div>
-      <div class="table-container">
-        <table class="data-table">
-          <thead><tr><th>#</th><th>Type</th><th>Content</th><th>Marks</th><th>Keep</th></tr></thead>
-          <tbody>
-            ${data.questions.map((q, i) => `
-              <tr>
-                <td>${i + 1}</td>
-                <td><span class="badge badge-info">${q.type}</span></td>
-                <td style="max-width:400px; font-size:0.8rem;">${escapeHtml(q.content).substring(0, 150)}${q.content.length > 150 ? '...' : ''}</td>
-                <td class="font-mono">${q.marks}</td>
-                <td><input type="checkbox" checked data-idx="${i}"></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+      <div class="ai-generated-questions-list" style="display:flex; flex-direction:column; gap:1.5rem; max-height: 600px; overflow-y: auto; padding-right: 8px;">
+        ${data.questions.map((q, i) => {
+          let optionsHtml = '';
+          if (q.options && Array.isArray(q.options)) {
+            const opts = q.options.map((opt) => {
+              const isCorrect = Array.isArray(q.correct_answer) 
+                ? q.correct_answer.includes(opt) 
+                : q.correct_answer === opt;
+              return (isCorrect ? '*' : '') + opt;
+            }).join('\\n');
+            
+            optionsHtml = `
+              <div class="mt-sm">
+                <label class="form-label" style="font-size: 0.8rem; color: var(--text-muted);">Options (one per line, prefix correct with *)</label>
+                <textarea class="form-control ai-q-options" data-idx="${i}" rows="${q.options.length + 1}">${escapeHtml(opts)}</textarea>
+              </div>
+            `;
+          } else if (q.type === 'true_false') {
+             optionsHtml = `
+               <div class="mt-sm">
+                 <label class="form-label" style="font-size: 0.8rem; color: var(--text-muted);">Correct Answer</label>
+                 <select class="form-control ai-q-correct" data-idx="${i}" style="max-width: 200px;">
+                   <option value="True" ${q.correct_answer === 'True' ? 'selected' : ''}>True</option>
+                   <option value="False" ${q.correct_answer === 'False' ? 'selected' : ''}>False</option>
+                 </select>
+               </div>
+             `;
+          }
+
+          return `
+            <div class="card p-md ai-question-card" data-idx="${i}" style="border-left: 4px solid var(--accent-primary);">
+              <div class="flex justify-between items-start mb-sm">
+                <div class="flex items-center gap-sm">
+                  <span class="badge badge-info">${q.type}</span>
+                  <label class="flex items-center gap-xs cursor-pointer">
+                    <input type="checkbox" checked class="ai-q-keep" data-idx="${i}">
+                    <strong style="font-size: 0.9rem;">Keep Question</strong>
+                  </label>
+                </div>
+                <div style="width: 100px;">
+                  <label class="form-label" style="font-size:0.75rem;">Marks</label>
+                  <input type="number" class="form-control form-control-sm ai-q-marks" data-idx="${i}" value="${q.marks || 1}" min="1" step="0.5">
+                </div>
+              </div>
+              <div>
+                <label class="form-label" style="font-size: 0.8rem; color: var(--text-muted);">Question Content</label>
+                <textarea class="form-control ai-q-content" data-idx="${i}" rows="3">${escapeHtml(q.content || q.question || '')}</textarea>
+              </div>
+              ${optionsHtml}
+            </div>
+          `;
+        }).join('')}
       </div>
       <div class="mt-md flex gap-sm">
         <button class="btn btn-success" onclick="saveGeneratedQuestions(${examId})">
@@ -1232,21 +1269,52 @@ async function generateAIQuestions(examId) {
 async function saveGeneratedQuestions(examId) {
   if (!window.__tempAiQuestions) return showToast('No questions to save', 'error');
 
-  const checkboxes = document.querySelectorAll('#ai-preview input[type="checkbox"]');
+  const checkboxes = document.querySelectorAll('.ai-q-keep');
   const selected = [];
+  
   checkboxes.forEach(cb => {
-    if (cb.checked) selected.push(window.__tempAiQuestions[parseInt(cb.dataset.idx)]);
+    if (cb.checked) {
+      const idx = parseInt(cb.dataset.idx);
+      const original = window.__tempAiQuestions[idx];
+      const q = { ...original };
+      
+      const contentEl = document.querySelector(`.ai-q-content[data-idx="${idx}"]`);
+      if (contentEl) q.content = contentEl.value.trim();
+      
+      const marksEl = document.querySelector(`.ai-q-marks[data-idx="${idx}"]`);
+      if (marksEl) q.marks = parseFloat(marksEl.value) || 1;
+      
+      const optionsArea = document.querySelector(`.ai-q-options[data-idx="${idx}"]`);
+      if (optionsArea) {
+        const lines = optionsArea.value.split('\\n').map(l => l.trim()).filter(l => l);
+        q.options = lines.map(l => l.startsWith('*') ? l.substring(1).trim() : l);
+        
+        if (q.type === 'mcq') {
+          const correct = lines.find(l => l.startsWith('*'));
+          if (correct) q.correct_answer = correct.substring(1).trim();
+        } else if (q.type === 'mcmq') {
+          q.correct_answer = lines.filter(l => l.startsWith('*')).map(l => l.substring(1).trim());
+        }
+      }
+      
+      const correctSelect = document.querySelector(`.ai-q-correct[data-idx="${idx}"]`);
+      if (correctSelect) {
+        q.correct_answer = correctSelect.value;
+      }
+      
+      selected.push(q);
+    }
   });
 
   if (selected.length === 0) return showToast('No questions selected', 'warning');
-  if (!confirm(`Are you sure you want to save ${selected.length} AI-generated questions to the exam?`)) return;
+  if (!confirm(`Are you sure you want to save ${selected.length} questions to the exam?`)) return;
 
   try {
     await api(`/api/admin/exams/${examId}/questions/save-generated`, {
       method: 'POST',
       body: { questions: selected },
     });
-    showToast(`Saved ${selected.length} AI-generated questions`, 'success');
+    showToast(`Saved ${selected.length} questions`, 'success');
     loadExamQuestions(examId, true);
   } catch (err) {
     showToast(err.message, 'error');

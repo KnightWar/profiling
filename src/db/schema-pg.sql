@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   phone         TEXT,
   active        INTEGER DEFAULT 1,
   active_session_id TEXT,
+  login_authorized BOOLEAN DEFAULT false,
   created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

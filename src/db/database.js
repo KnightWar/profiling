@@ -149,6 +149,9 @@ async function initDb() {
   if (isPg) {
     const pool = getPgPool();
     
+    // Run Postgres migrations for existing databases before early return
+    try { await pool.query("ALTER TABLE users ADD COLUMN login_authorized BOOLEAN DEFAULT false;"); } catch (e) {}
+
     // Quick check if schema is already applied to avoid 10+ second DDL execution on cold starts
     try {
       const checkRes = await pool.query('SELECT COUNT(*) as c FROM components');

@@ -84,6 +84,10 @@ router.post('/access-code-login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid Roll Number. Student not found in system.' });
     }
 
+    if (!student.login_authorized) {
+      return res.status(403).json({ error: 'STUDENT_LOGIN_LOCKED', message: 'You are not authorized to login at this time.' });
+    }
+
     // 2. Check exam by Access Code
     const cleanCode = access_code.trim().toUpperCase();
     const exam = await db.prepare(`

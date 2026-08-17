@@ -76,7 +76,7 @@ router.get('/students', async (req, res) => {
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   let sql = `
-    SELECT u.id, u.name, u.email, u.roll_no, u.phone, u.active, u.created_at,
+    SELECT u.id, u.name, u.email, u.roll_no, u.phone, u.active, u.created_at, u.login_authorized,
            cs.total_score, cs.level,
            GROUP_CONCAT(b.name, ', ') as batches
     FROM users u
@@ -243,6 +243,30 @@ router.post('/students/bulk', upload.single('file'), async (req, res) => {
   }
 });
 
+// ─── PUT /api/admin/authorizations ──────────────────────────────────────────
+router.put('/authorizations', async (req, res) => {
+  try {
+    const { studentIds, authorized } = req.body;
+    if (!Array.isArray(studentIds)) {
+      return res.status(400).json({ error: 'studentIds must be an array' });
+    }
+    const db = getDb();
+    const placeholders = studentIds.map(() => '?').join(',');
+    const val = authorized ? 1 : 0;
+    
+    // Using transaction for bulk update
+    db.transaction(() => {
+      db.prepare(`UPDATE users SET login_authorized = ? WHERE id IN (${placeholders}) AND role = 'student'`)
+        .run(val, ...studentIds);
+    })();
+    
+    res.json({ message: 'Authorizations updated successfully' });
+  } catch (err) {
+    console.error('Authorization update error:', err);
+    res.status(500).json({ error: 'Failed to update authorizations' });
+  }
+});
+
 // ─── PUT /api/admin/students/:id ────────────────────────────────────────────
 router.put('/students/:id', async (req, res) => {
   try {
@@ -289,15 +313,15 @@ router.delete('/students/:id/exams', async (req, res) => {
   if (!student) return res.status(404).json({ error: 'Student not found' });
 
   try {
-    const deleteTx = db.transaction(async () => {
-      await db.prepare('DELETE FROM composite_scores WHERE student_id = ?').run(req.params.id);
-      await db.prepare('DELETE FROM component_totals WHERE student_id = ?').run(req.params.id);
-      await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(req.params.id);
-      await db.prepare('DELETE FROM responses WHERE student_id = ?').run(req.params.id);
-      await db.prepare('DELETE FROM exam_sessions WHERE student_id = ?').run(req.params.id);
-      await db.prepare('DELETE FROM violations WHERE student_id = ?').run(req.params.id);
+    const deleteTx = db.transaction(() => {
+      db.prepare('DELETE FROM composite_scores WHERE student_id = ?').run(req.params.id);
+      db.prepare('DELETE FROM component_totals WHERE student_id = ?').run(req.params.id);
+      db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(req.params.id);
+      db.prepare('DELETE FROM responses WHERE student_id = ?').run(req.params.id);
+      db.prepare('DELETE FROM exam_sessions WHERE student_id = ?').run(req.params.id);
+      db.prepare('DELETE FROM violations WHERE student_id = ?').run(req.params.id);
       // Reset active session ID just in case
-      await db.prepare('UPDATE users SET active_session_id = NULL WHERE id = ?').run(req.params.id);
+      db.prepare('UPDATE users SET active_session_id = NULL WHERE id = ?').run(req.params.id);
     });
     await deleteTx();
     res.json({ message: 'All exams and scores for this student have been reset.' });
@@ -728,17 +752,17 @@ router.post('/exams/:id/batches', async (req, res) => {
     const db = getDb();
     const examId = req.params.id;
 
-    db.transaction(async () => {
+    db.transaction(() => {
       // Remove all batches currently assigned to THIS exam
-      await db.prepare('DELETE FROM exam_batches WHERE exam_id = ?').run(examId);
+      db.prepare('DELETE FROM exam_batches WHERE exam_id = ?').run(examId);
 
       const removeBatchFromOtherExams = db.prepare('DELETE FROM exam_batches WHERE batch_id = ?');
       const stmt = db.prepare('INSERT OR IGNORE INTO exam_batches (exam_id, batch_id) VALUES (?, ?)');
 
       for (const bid of batch_ids) {
         // Enforce one exam per batch: remove this batch from any other exams
-        await removeBatchFromOtherExams.run(bid);
-        await stmt.run(examId, bid);
+        removeBatchFromOtherExams.run(bid);
+        stmt.run(examId, bid);
       }
     })();
 

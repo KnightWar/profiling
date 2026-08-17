@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
   roll_no       TEXT,
   phone         TEXT,
   active        INTEGER DEFAULT 1,
+  login_authorized INTEGER DEFAULT 0,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

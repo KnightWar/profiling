@@ -320,8 +320,15 @@ async function handleAccessCodeLogin(e) {
       window.location.hash = `#/student/exam/${data.exam.id}`;
     }
   } catch (err) {
-    errEl.textContent = err.message;
-    errEl.style.display = 'block';
+    if (err.message === 'STUDENT_LOGIN_LOCKED') {
+      const lockOverlay = document.getElementById('student-login-lock-overlay');
+      if (lockOverlay) {
+        lockOverlay.style.display = 'flex';
+      }
+    } else {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    }
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<i class="ph ph-rocket-launch"></i> Enter Exam Session';

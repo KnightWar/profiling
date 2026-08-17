@@ -233,6 +233,8 @@ async function renderStudentManager(isBackground = false) {
           <div id="bulk-action-bar" style="display: none; padding: 10px; background: rgba(99,102,241,0.1); border-radius: 8px; align-items: center; justify-content: space-between;">
             <span style="font-weight: 600; color: var(--accent-indigo);"><span id="selected-student-count">0</span> students selected</span>
             <div class="btn-group">
+              <button class="btn btn-outline btn-sm" onclick="bulkSetAuthorization(true)" title="Authorize Login"><i class="ph ph-lock-open"></i> Authorize</button>
+              <button class="btn btn-outline btn-sm" onclick="bulkSetAuthorization(false)" title="Revoke Login"><i class="ph ph-lock-key"></i> Revoke</button>
               <button class="btn btn-outline btn-sm" onclick="openBulkAssignBatchModal()">Assign to Batch</button>
               <button class="btn btn-danger btn-sm" onclick="bulkDeleteStudents()">Delete Selected</button>
             </div>
@@ -245,7 +247,7 @@ async function renderStudentManager(isBackground = false) {
               <tr>
                 <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllStudents" onchange="toggleAllStudents(this)"></th>
                 <th>Name</th><th>Reg / Roll No</th><th>Composite Score</th>
-                <th>Batches</th><th>Level</th><th>Status</th><th>Actions</th>
+                <th>Batches</th><th>Level</th><th>Status</th><th>Login</th><th>Actions</th>
               </tr>
             </thead>
             <tbody id="students-tbody">
@@ -258,6 +260,9 @@ async function renderStudentManager(isBackground = false) {
                   <td><span class="badge badge-neutral" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle;" title="${escapeHtml(s.batches || 'None')}">${escapeHtml(s.batches || 'None')}</span></td>
                   <td>${s.level ? levelBadge(s.level) : '<span class="badge badge-neutral">Pending</span>'}</td>
                   <td>${s.active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-danger">Inactive</span>'}</td>
+                  <td style="cursor: pointer;" onclick="toggleSingleAuthorization(${s.id}, ${!s.login_authorized})">
+                    ${s.login_authorized ? '<span class="badge badge-success" title="Click to Revoke"><i class="ph ph-lock-open"></i> Allowed</span>' : '<span class="badge badge-danger" title="Click to Authorize"><i class="ph ph-lock-key"></i> Locked</span>'}
+                  </td>
                   <td>
                     <div class="btn-group">
                       <button class="btn btn-action btn-sm" onclick="editStudent(${s.id})" title="Reset Exams"><i class="ph ph-arrows-clockwise"></i></button>
@@ -266,7 +271,7 @@ async function renderStudentManager(isBackground = false) {
                   </td>
                 </tr>
               `).join('')}
-              ${data.students.length === 0 ? '<tr><td colspan="8" class="text-center text-muted" style="padding:32px;">No students yet. Click "Add Student" or "Bulk Import" to get started.</td></tr>' : ''}
+              ${data.students.length === 0 ? '<tr><td colspan="9" class="text-center text-muted" style="padding:32px;">No students yet. Click "Add Student" or "Bulk Import" to get started.</td></tr>' : ''}
             </tbody>
           </table>
         </div>
@@ -304,6 +309,9 @@ async function fetchFilteredStudents() {
           <td><span class="badge badge-neutral" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle;" title="${escapeHtml(s.batches || 'None')}">${escapeHtml(s.batches || 'None')}</span></td>
           <td>${s.level ? levelBadge(s.level) : '<span class="badge badge-neutral">Pending</span>'}</td>
           <td>${s.active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-danger">Inactive</span>'}</td>
+          <td style="cursor: pointer;" onclick="toggleSingleAuthorization(${s.id}, ${!s.login_authorized})">
+            ${s.login_authorized ? '<span class="badge badge-success" title="Click to Revoke"><i class="ph ph-lock-open"></i> Allowed</span>' : '<span class="badge badge-danger" title="Click to Authorize"><i class="ph ph-lock-key"></i> Locked</span>'}
+          </td>
           <td>
             <div class="btn-group">
               <button class="btn btn-action btn-sm" onclick="editStudent(${s.id})" title="Reset Exams"><i class="ph ph-arrows-clockwise"></i></button>
@@ -314,7 +322,7 @@ async function fetchFilteredStudents() {
       `).join('');
 
       if (data.students.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:32px;">No students found matching your criteria.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding:32px;">No students found matching your criteria.</td></tr>';
       }
     } catch (err) {
       showToast('Search failed', 'error');
@@ -443,6 +451,35 @@ function updateBulkActionBar() {
 
 function getSelectedStudentIds() {
   return Array.from(document.querySelectorAll('.student-checkbox:checked')).map(cb => parseInt(cb.value));
+}
+
+async function bulkSetAuthorization(authorized) {
+  const studentIds = getSelectedStudentIds();
+  if (studentIds.length === 0) return;
+
+  try {
+    await api('/api/admin/authorizations', {
+      method: 'PUT',
+      body: JSON.stringify({ studentIds, authorized })
+    });
+    showToast(`Successfully ${authorized ? 'authorized' : 'revoked'} login for ${studentIds.length} students`, 'success');
+    renderStudentManager(); // refresh list
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function toggleSingleAuthorization(studentId, authorized) {
+  try {
+    await api('/api/admin/authorizations', {
+      method: 'PUT',
+      body: JSON.stringify({ studentIds: [studentId], authorized })
+    });
+    showToast(`Successfully ${authorized ? 'authorized' : 'revoked'} login`, 'success');
+    renderStudentManager(); // refresh list
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 async function bulkDeleteStudents() {

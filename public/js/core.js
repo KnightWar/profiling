@@ -421,6 +421,7 @@ async function handleLogout(reason) {
   } catch {}
   App.user = null;
   App._roleModuleLoaded = false;
+  invalidateCache('*');
   window.location.hash = '';
   showLogin();
 

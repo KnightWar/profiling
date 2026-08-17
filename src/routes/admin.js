@@ -334,14 +334,14 @@ router.delete('/students/:id/exams', async (req, res) => {
 // ─── DELETE /api/admin/students/:id ─────────────────────────────────────────
 router.delete('/students/:id', async (req, res) => {
   const db = getDb();
-  const student = await db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(req.params.id);
+  const id = parseInt(req.params.id, 10);
+  const student = await db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(id);
   if (!student) {
     return res.status(404).json({ error: 'Student not found' });
   }
 
   // Hard delete student and clean up all associated records in DB
   try {
-    const id = req.params.id;
     await db.prepare('DELETE FROM composite_scores WHERE student_id = ?').run(id);
     await db.prepare('DELETE FROM component_totals WHERE student_id = ?').run(id);
     await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(id);
@@ -354,7 +354,7 @@ router.delete('/students/:id', async (req, res) => {
     res.json({ message: 'Student permanently deleted from database' });
   } catch (err) {
     console.error('Delete error:', err);
-    res.status(500).json({ error: 'Failed to delete student' });
+    res.status(500).json({ error: `Failed to delete student: ${err.message}` });
   }
 });
 
@@ -367,7 +367,8 @@ router.post('/students/bulk-delete', async (req, res) => {
 
   const db = getDb();
   try {
-    for (const id of student_ids) {
+    for (const rawId of student_ids) {
+      const id = parseInt(rawId, 10);
       await db.prepare('DELETE FROM composite_scores WHERE student_id = ?').run(id);
       await db.prepare('DELETE FROM component_totals WHERE student_id = ?').run(id);
       await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(id);
@@ -380,7 +381,7 @@ router.post('/students/bulk-delete', async (req, res) => {
     res.json({ message: `Successfully deleted ${student_ids.length} students` });
   } catch (err) {
     console.error('Bulk delete error:', err);
-    res.status(500).json({ error: 'Failed to delete students' });
+    res.status(500).json({ error: `Failed to delete students: ${err.message}` });
   }
 });
 

@@ -504,8 +504,13 @@ async function submitExam(examId, forceSubmit = false, remarks = null) {
       body: bodyData,
     });
 
-    showToast(`Exam submitted! ${data.autoGraded} auto-graded, ${data.pendingReview} pending review`, 'success');
-    window.location.replace(window.location.origin + window.location.pathname + '#/student/dashboard');
+    examState = { active: false, session: null, questions: [], responses: {}, timerInterval: null };
+    showToast(`Exam submitted! Logging you out...`, 'success');
+    
+    // Auto-logout after submission
+    setTimeout(() => {
+      handleLogout();
+    }, 2000);
   } catch (err) {
     showToast(err.message, 'error');
   }

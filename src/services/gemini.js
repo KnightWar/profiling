@@ -253,8 +253,15 @@ async function generateQuestions({ topic, description, difficulty, component, ty
       }
     } catch (err) {
       console.error(`  ✗ Failed to generate ${qType}: ${err.message}`);
-      // Continue with other types
+      // If we completely fail to generate anything, throw the error
+      if (allQuestions.length === 0) {
+        throw new Error(`AI Generation Failed: ${err.message}`);
+      }
     }
+  }
+
+  if (allQuestions.length === 0) {
+    throw new Error('AI generated an empty response. Please check your API key and prompt.');
   }
 
   return allQuestions;

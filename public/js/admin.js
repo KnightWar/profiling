@@ -1604,8 +1604,11 @@ setInterval(() => {
   if (!document.querySelector('.modal.active') && App.user?.role === 'admin') {
     const studentsTbody = document.getElementById('students-tbody');
     const activeInput   = document.activeElement;
+    
+    // Only refresh if no checkboxes are selected and we aren't typing in the search box
+    const hasSelection = document.querySelectorAll('.student-checkbox:checked').length > 0;
 
-    if (studentsTbody && activeInput !== document.getElementById('student-search')) {
+    if (studentsTbody && activeInput !== document.getElementById('student-search') && !hasSelection) {
       fetchFilteredStudents();
     } else if (document.querySelector('[data-stat="students"]')) {
       // On dashboard: patch only stat values, no full rebuild

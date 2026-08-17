@@ -340,18 +340,22 @@ router.delete('/students/:id', async (req, res) => {
   }
 
   // Hard delete student and clean up all associated records in DB
-  const deleteTx = db.transaction(async () => {
-    await db.prepare('DELETE FROM composite_scores WHERE student_id = ?').run(req.params.id);
-    await db.prepare('DELETE FROM component_totals WHERE student_id = ?').run(req.params.id);
-    await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(req.params.id);
-    await db.prepare('DELETE FROM responses WHERE student_id = ?').run(req.params.id);
-    await db.prepare('DELETE FROM exam_sessions WHERE student_id = ?').run(req.params.id);
-    await db.prepare('DELETE FROM violations WHERE student_id = ?').run(req.params.id);
-    await db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
-  });
-  await deleteTx();
-
-  res.json({ message: 'Student permanently deleted from database' });
+  try {
+    const id = req.params.id;
+    await db.prepare('DELETE FROM composite_scores WHERE student_id = ?').run(id);
+    await db.prepare('DELETE FROM component_totals WHERE student_id = ?').run(id);
+    await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(id);
+    await db.prepare('DELETE FROM responses WHERE student_id = ?').run(id);
+    await db.prepare('DELETE FROM exam_sessions WHERE student_id = ?').run(id);
+    await db.prepare('DELETE FROM violations WHERE student_id = ?').run(id);
+    await db.prepare('DELETE FROM student_batches WHERE student_id = ?').run(id);
+    await db.prepare("DELETE FROM users WHERE id = ? AND role = 'student'").run(id);
+    
+    res.json({ message: 'Student permanently deleted from database' });
+  } catch (err) {
+    console.error('Delete error:', err);
+    res.status(500).json({ error: 'Failed to delete student' });
+  }
 });
 
 // ─── POST /api/admin/students/bulk-delete ───────────────────────────────────
@@ -363,19 +367,16 @@ router.post('/students/bulk-delete', async (req, res) => {
 
   const db = getDb();
   try {
-    const deleteTx = db.transaction(async (ids) => {
-      for (const id of ids) {
-        await db.prepare('DELETE FROM composite_scores WHERE student_id = ?').run(id);
-        await db.prepare('DELETE FROM component_totals WHERE student_id = ?').run(id);
-        await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(id);
-        await db.prepare('DELETE FROM responses WHERE student_id = ?').run(id);
-        await db.prepare('DELETE FROM exam_sessions WHERE student_id = ?').run(id);
-        await db.prepare('DELETE FROM violations WHERE student_id = ?').run(id);
-        await db.prepare('DELETE FROM student_batches WHERE student_id = ?').run(id);
-        await db.prepare("DELETE FROM users WHERE id = ? AND role = 'student'").run(id);
-      }
-    });
-    await deleteTx(student_ids);
+    for (const id of student_ids) {
+      await db.prepare('DELETE FROM composite_scores WHERE student_id = ?').run(id);
+      await db.prepare('DELETE FROM component_totals WHERE student_id = ?').run(id);
+      await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(id);
+      await db.prepare('DELETE FROM responses WHERE student_id = ?').run(id);
+      await db.prepare('DELETE FROM exam_sessions WHERE student_id = ?').run(id);
+      await db.prepare('DELETE FROM violations WHERE student_id = ?').run(id);
+      await db.prepare('DELETE FROM student_batches WHERE student_id = ?').run(id);
+      await db.prepare("DELETE FROM users WHERE id = ? AND role = 'student'").run(id);
+    }
     res.json({ message: `Successfully deleted ${student_ids.length} students` });
   } catch (err) {
     console.error('Bulk delete error:', err);

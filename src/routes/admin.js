@@ -109,7 +109,7 @@ router.get('/students', async (req, res) => {
     countParams.push(term, term, term);
   }
 
-  sql += ` GROUP BY u.id, u.name, u.email, u.roll_no, u.phone, u.active, u.created_at, cs.total_score, cs.level ORDER BY u.name ASC LIMIT ? OFFSET ?`;
+  sql += ` GROUP BY u.id, u.name, u.email, u.roll_no, u.phone, u.active, u.login_authorized, u.created_at, cs.total_score, cs.level ORDER BY u.name ASC LIMIT ? OFFSET ?`;
   params.push(parseInt(limit), offset);
 
   const students = await db.prepare(sql).all(...params);

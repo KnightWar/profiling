@@ -176,10 +176,11 @@ function isGoogleChrome() {
 function loadRoleModule(role) {
   if (App._roleModuleLoaded) return Promise.resolve();
 
+  const cb = '?v=' + Date.now();
   const map = {
-    admin:     ['/dist/admin.js', '/dist/evaluator.js'],
-    student:   ['/dist/student.js'],
-    evaluator: ['/dist/evaluator.js'],
+    admin:     ['/dist/admin.js' + cb, '/dist/evaluator.js' + cb],
+    student:   ['/dist/student.js' + cb],
+    evaluator: ['/dist/evaluator.js' + cb],
   };
 
   const scripts = map[role] || [];

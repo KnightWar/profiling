@@ -1253,6 +1253,9 @@ async function generateAIQuestions(examId) {
         <button class="btn btn-success" onclick="saveGeneratedQuestions(${examId})">
           <i class="ph ph-check-circle"></i> Save Selected Questions
         </button>
+        <button class="btn btn-primary" onclick="generateAIQuestions(${examId})">
+          <i class="ph ph-arrows-clockwise"></i> Redraft Questions
+        </button>
         <button class="btn btn-outline" onclick="document.getElementById('ai-preview').innerHTML=''">
           ✗ Discard All
         </button>

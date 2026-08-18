@@ -239,7 +239,7 @@ router.post('/exams/:id/questions/save-generated', async (req, res, next) => {
           q.marks,
           q.content || q.question,
           q.options ? JSON.stringify(q.options) : null,
-          q.correct_answer || q.correct || null,
+          q.correct_answer !== null && typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer) : (q.correct_answer || q.correct || null),
           q.test_cases ? JSON.stringify(q.test_cases) : null,
           q.rubric ? JSON.stringify(q.rubric) : null,
           sortOrder,

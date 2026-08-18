@@ -906,7 +906,7 @@ async function renderQuestionManager(isBackground = false) {
   }
 }
 
-async function loadExamQuestions(examId, isBackground = false) {
+async function loadExamQuestions(examId, isBackground = false, targetTab = null) {
   if (!examId) {
     const contentEl = document.getElementById('qm-content');
     if (contentEl) contentEl.innerHTML = '';
@@ -914,7 +914,7 @@ async function loadExamQuestions(examId, isBackground = false) {
   }
 
   const container = document.getElementById('qm-content');
-  const activeTabName = container.querySelector('.tab.active')?.dataset?.tab || 'qm-existing';
+  const activeTabName = targetTab || container.querySelector('.tab.active')?.dataset?.tab || 'qm-existing';
 
   if (!isBackground || !container.querySelector('.data-table')) {
     container.innerHTML = `<div class="loading-overlay"><div class="spinner"></div></div>`;
@@ -1166,7 +1166,7 @@ async function submitManualQuestion(examId) {
   try {
     await api(`/api/admin/exams/${examId}/questions`, { method: 'POST', body });
     showToast('Question added successfully', 'success');
-    loadExamQuestions(examId, true);
+    loadExamQuestions(examId, false, 'qm-existing');
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1368,7 +1368,7 @@ async function saveGeneratedQuestions(examId) {
     });
     showToast(`Saved ${selected.length} questions successfully!`, 'success');
     window.__tempAiQuestions = null;
-    loadExamQuestions(examId, true);
+    loadExamQuestions(examId, false, 'qm-existing');
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1384,7 +1384,7 @@ async function uploadQuestions(examId) {
   try {
     const data = await api(`/api/admin/exams/${examId}/questions/upload`, { method: 'POST', body: formData });
     showToast(data.message, 'success');
-    loadExamQuestions(examId, true);
+    loadExamQuestions(examId, false, 'qm-existing');
   } catch (err) {
     showToast(err.message, 'error');
   }

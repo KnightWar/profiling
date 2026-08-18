@@ -323,13 +323,30 @@ function buildQuestionCard(examId) {
         <i class="ph ph-record" style="animation:pulse 1.5s infinite"></i> Recording in progress... Please read the text above clearly.
       </div>
     </div>
+  ` : q.type === 'programming' ? `
+    <div class="programming-editor-container" style="border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: #0d1117; margin-top: 14px;">
+      <div style="background: #161b22; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); font-size: 0.8rem; color: #8b949e;">
+        <div style="display: flex; align-items: center; gap: 8px; font-family: monospace; font-weight: 600;">
+          <i class="ph ph-code" style="color: var(--accent-indigo);"></i>
+          <span>Code Editor (Indentation & Syntax Preserved)</span>
+        </div>
+        <span class="badge badge-neutral" style="font-size: 0.75rem;">Tab Key Indents 4 Spaces</span>
+      </div>
+      <textarea class="form-textarea" id="answer-input" rows="12"
+        placeholder="# Write your clean solution code here..."
+        oninput="autoSaveResponse(${q.id}, this.value, ${examId})"
+        spellcheck="false" autocomplete="off" autocorrect="off"
+        data-gramm="false" data-lt-active="false" data-dashlane-rm="true"
+        style="width: 100%; border: none; background: transparent; color: #f0f6fc; font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; font-size: 0.92rem; line-height: 1.6; padding: 14px 16px; tab-size: 4; resize: vertical; outline: none; white-space: pre;"
+      >${escapeHtml(currentAnswer)}</textarea>
+    </div>
   ` : `
     <textarea class="form-textarea" id="answer-input" rows="6"
       placeholder="Type your answer here..."
       oninput="autoSaveResponse(${q.id}, this.value, ${examId})"
       spellcheck="false" autocomplete="off" autocorrect="off"
       data-gramm="false" data-lt-active="false" data-dashlane-rm="true"
-      style="${q.type === 'programming' ? 'font-family:monospace; font-size:0.9rem;' : ''}"
+      style="font-size: 0.95rem; line-height: 1.5;"
     >${escapeHtml(currentAnswer)}</textarea>
   `;
 
@@ -343,8 +360,8 @@ function buildQuestionCard(examId) {
         </div>
       </div>
 
-      <div style="font-size:1.05rem; color:var(--text-primary); margin-bottom:var(--sp-lg); line-height:1.7;">
-        ${escapeHtml(q.content)}
+      <div class="question-content-statement" style="font-size:1.02rem; color:var(--text-primary); margin-bottom:var(--sp-lg); line-height:1.6;">
+        ${renderRichContent(q.content)}
       </div>
 
       ${answerHtml}
@@ -352,17 +369,24 @@ function buildQuestionCard(examId) {
   `;
 }
 
-// ─── HOT-PATH: NAVIGATION (2.3) ──────────────────────────────────────────────
+// ─── DOM PATCH HELPERS (2.3) ─────────────────────────────────────────────────
 
-/**
- * Navigate to question by index.
- * Patches only the question card and nav dots — no full page rebuild.
- */
-function goToQuestion(idx, examId) {
-  if (idx < 0 || idx >= examState.questions.length) return;
-  examState.currentIdx = idx;
-  patchExamQuestion(examId);  // replaces only #question-card + nav buttons
-  patchQuestionNav(examId);   // replaces only .question-nav dots
+/** Rebuilds only the navigation dots (answered/current state). */
+function patchQuestionNav(examId) {
+  const nav = document.getElementById('question-nav');
+  if (nav) nav.innerHTML = buildNavDots(examId);
+}
+
+/** Rebuilds only the question card content (question text + answer input). */
+function patchExamQuestion(examId) {
+  const card = document.getElementById('question-card');
+  if (card) card.innerHTML = buildQuestionCard(examId);
+
+  const navBtns = document.getElementById('exam-nav-btns');
+  if (navBtns) navBtns.innerHTML = buildNavButtons(examId);
+
+  const answerInput = document.getElementById('answer-input');
+  if (answerInput) setupCodeTextarea(answerInput);
 }
 
 // ─── HOT-PATH: MCQ SELECT (2.3) ──────────────────────────────────────────────
@@ -809,9 +833,9 @@ async function renderStudentResults() {
                     </div>
 
                     <!-- Question Statement -->
-                    <div style="margin-bottom:12px;">
-                      <div class="text-sm text-muted" style="font-size:0.75rem; font-weight:700; text-transform:uppercase; margin-bottom:4px;">Question</div>
-                      <div style="color:var(--text-primary); font-size:0.95rem; line-height:1.5;">${escapeHtml(q.content)}</div>
+                    <div style="margin-bottom:14px;">
+                      <div class="text-sm text-muted" style="font-size:0.75rem; font-weight:700; text-transform:uppercase; margin-bottom:6px;">Question Statement</div>
+                      <div style="color:var(--text-primary); font-size:0.95rem; line-height:1.55;">${renderRichContent(q.content)}</div>
                     </div>
 
                     <!-- Options if MCQ -->
@@ -827,23 +851,31 @@ async function renderStudentResults() {
 
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;" class="q-ans-grid">
                       <!-- Student Provided Answer -->
-                      <div style="padding:10px 12px; border-radius:6px; border:1px solid ${isZero ? 'rgba(244,63,94,0.3)' : 'rgba(16,185,129,0.3)'}; background:${isZero ? 'rgba(244,63,94,0.04)' : 'rgba(16,185,129,0.04)'};">
-                        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:${isZero ? 'var(--accent-rose)' : 'var(--accent-emerald)'}; margin-bottom:4px;">
-                          Your Provided Answer
+                      <div style="padding:12px; border-radius:6px; border:1px solid ${isZero ? 'rgba(244,63,94,0.3)' : 'rgba(16,185,129,0.3)'}; background:${isZero ? 'rgba(244,63,94,0.04)' : 'rgba(16,185,129,0.04)'}; overflow:hidden;">
+                        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:${isZero ? 'var(--accent-rose)' : 'var(--accent-emerald)'}; margin-bottom:6px;">
+                          Your Submitted Answer
                         </div>
-                        <div style="font-family:${q.type === 'programming' ? 'monospace' : 'inherit'}; font-size:0.9rem; white-space:pre-wrap; color:var(--text-primary); line-height:1.4;">
-                          ${escapeHtml(q.student_answer || 'No answer submitted')}
-                        </div>
+                        ${q.type === 'programming' ? `
+                          <pre style="margin:0; padding:10px 12px; background:#0d1117; border-radius:6px; font-family:'JetBrains Mono', Consolas, monospace; font-size:0.85rem; white-space:pre; overflow-x:auto; line-height:1.5; color:#f0f6fc;"><code>${escapeHtml(q.student_answer || 'No answer submitted')}</code></pre>
+                        ` : `
+                          <div style="font-size:0.9rem; white-space:pre-wrap; color:var(--text-primary); line-height:1.4;">
+                            ${escapeHtml(q.student_answer || 'No answer submitted')}
+                          </div>
+                        `}
                       </div>
 
                       <!-- Official Correct Answer -->
-                      <div style="padding:10px 12px; border-radius:6px; border:1px solid rgba(16,185,129,0.3); background:rgba(16,185,129,0.06);">
-                        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:var(--accent-emerald); margin-bottom:4px;">
+                      <div style="padding:12px; border-radius:6px; border:1px solid rgba(16,185,129,0.3); background:rgba(16,185,129,0.06); overflow:hidden;">
+                        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:var(--accent-emerald); margin-bottom:6px;">
                           Correct / Model Answer
                         </div>
-                        <div style="font-family:${q.type === 'programming' ? 'monospace' : 'inherit'}; font-size:0.9rem; white-space:pre-wrap; color:var(--text-primary); line-height:1.4;">
-                          ${escapeHtml(typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer) : (q.correct_answer || 'Reference criteria applied'))}
-                        </div>
+                        ${q.type === 'programming' ? `
+                          <pre style="margin:0; padding:10px 12px; background:#0d1117; border:1px solid rgba(16,185,129,0.25); border-radius:6px; font-family:'JetBrains Mono', Consolas, monospace; font-size:0.85rem; white-space:pre; overflow-x:auto; line-height:1.5; color:#34d399;"><code>${escapeHtml(typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer, null, 2) : (q.correct_answer || 'Reference criteria applied'))}</code></pre>
+                        ` : `
+                          <div style="font-size:0.9rem; white-space:pre-wrap; color:var(--text-primary); line-height:1.4;">
+                            ${escapeHtml(typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer, null, 2) : (q.correct_answer || 'Reference criteria applied'))}
+                          </div>
+                        `}
                       </div>
                     </div>
 

@@ -1254,9 +1254,9 @@ async function generateAIQuestions(examId) {
             answerBlock = `
               <div class="mt-sm">
                 <label class="form-label" style="font-size: 0.8rem; font-weight:600; color: var(--accent-emerald);">
-                  ${isProg ? 'Model Solution Code (Python / Reference)' : 'Model / Correct Answer Statement'}
+                  ${isProg ? 'Model Solution Code (Python / Language-Specific Reference Code — Press Tab to Indent)' : 'Model / Correct Answer Statement'}
                 </label>
-                <textarea class="form-textarea ai-q-answer" data-idx="${i}" rows="${isProg ? 5 : 3}" style="font-family: ${isProg ? 'monospace' : 'inherit'}; font-size: 0.9rem; border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.02);">${escapeHtml(modelAnsText)}</textarea>
+                <textarea class="form-textarea ai-q-answer" data-idx="${i}" rows="${isProg ? 8 : 4}" style="font-family:${isProg ? "'JetBrains Mono', Consolas, monospace" : 'inherit'}; font-size:0.88rem; line-height:1.5; tab-size:4; white-space:pre; border-color:rgba(16,185,129,0.3); background:${isProg ? '#0d1117' : 'rgba(16,185,129,0.02)'}; color:${isProg ? '#34d399' : 'inherit'};">${escapeHtml(modelAnsText)}</textarea>
               </div>
             `;
           }
@@ -1288,8 +1288,8 @@ async function generateAIQuestions(examId) {
               </div>
 
               <div>
-                <label class="form-label" style="font-size: 0.8rem; font-weight:600; color: var(--text-muted);">Question Statement (Editable)</label>
-                <textarea class="form-textarea ai-q-content" data-idx="${i}" rows="3" style="font-size:0.95rem;">${escapeHtml(q.content || q.question || '')}</textarea>
+                <label class="form-label" style="font-size: 0.8rem; font-weight:600; color: var(--text-muted);">Question Statement (Markdown & Code Supported)</label>
+                <textarea class="form-textarea ai-q-content" data-idx="${i}" rows="5" style="font-size:0.92rem; line-height:1.5; tab-size:4;">${escapeHtml(q.content || q.question || '')}</textarea>
               </div>
 
               ${optionsBlock}
@@ -1310,6 +1310,8 @@ async function generateAIQuestions(examId) {
         </button>
       </div>
     `;
+
+    document.querySelectorAll('.ai-q-answer, .ai-q-content').forEach(el => setupCodeTextarea(el));
   } catch (err) {
     preview.innerHTML = `<div class="empty-state" style="color:var(--accent-rose);"><p>Generation failed: ${err.message}</p></div>`;
   } finally {
@@ -1397,14 +1399,22 @@ async function viewQuestion(qId, examId) {
     if (!q) return;
 
     let detailHtml = `
-      <div class="mb-md"><span class="badge badge-info">${q.type}</span> <span class="badge badge-neutral">${q.marks} marks</span> <span class="badge ${q.source === 'ai_generated' ? 'badge-warning' : 'badge-neutral'}">${q.source}</span></div>
-      <div class="mb-md"><strong>Question:</strong><br><div style="padding:10px; background:var(--bg-body); border-radius:6px; margin-top:4px;">${escapeHtml(q.content)}</div></div>
+      <div class="mb-md"><span class="badge badge-info">${escapeHtml(q.type)}</span> <span class="badge badge-neutral">${q.marks} marks</span> <span class="badge ${q.source === 'ai_generated' ? 'badge-warning' : 'badge-neutral'}">${escapeHtml(q.source)}</span> <span class="badge badge-neutral">${escapeHtml(q.difficulty || 'medium')}</span></div>
+      <div class="mb-md"><strong>Question:</strong><br><div style="padding:12px 14px; background:var(--bg-body); border-radius:6px; border:1px solid var(--border-color); margin-top:6px; line-height:1.6;">${renderRichContent(q.content)}</div></div>
     `;
     if (q.options && q.options.length > 0) {
-      detailHtml += `<div class="mb-md"><strong>Options:</strong><div style="margin-top:4px;">${q.options.map((o, i) => `<div><strong>${String.fromCharCode(65 + i)})</strong> ${escapeHtml(o)}</div>`).join('')}</div></div>`;
+      detailHtml += `<div class="mb-md"><strong>Options:</strong><div style="margin-top:6px; display:grid; grid-template-columns:1fr 1fr; gap:6px;">${q.options.map((o, i) => `<div style="padding:6px 10px; background:rgba(255,255,255,0.02); border-radius:4px;"><strong>${String.fromCharCode(65 + i)})</strong> ${escapeHtml(o)}</div>`).join('')}</div></div>`;
     }
     if (q.correct_answer) {
-      detailHtml += `<div class="mb-md"><strong>Correct / Model Answer:</strong><pre style="padding:10px; background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:6px; font-family:${q.type === 'programming' ? 'monospace' : 'inherit'}; white-space:pre-wrap; margin-top:4px;">${escapeHtml(typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer, null, 2) : q.correct_answer)}</pre></div>`;
+      detailHtml += `
+        <div class="mb-md"><strong>Correct / Model Answer:</strong>
+          ${q.type === 'programming' ? `
+            <pre style="padding:12px 14px; background:#0d1117; border:1px solid rgba(16,185,129,0.3); border-radius:6px; font-family:'JetBrains Mono', Consolas, monospace; font-size:0.88rem; white-space:pre; overflow-x:auto; line-height:1.5; color:#34d399; margin-top:6px;"><code>${escapeHtml(typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer, null, 2) : q.correct_answer)}</code></pre>
+          ` : `
+            <div style="padding:10px 14px; background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:6px; font-size:0.9rem; white-space:pre-wrap; color:var(--text-primary); margin-top:6px;">${escapeHtml(typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer, null, 2) : q.correct_answer)}</div>
+          `}
+        </div>
+      `;
     }
     openModal(`Question Details #${qId}`, detailHtml);
   } catch (err) {
@@ -1454,8 +1464,8 @@ async function editExistingQuestion(qId, examId) {
         </div>
 
         <div class="form-group">
-          <label class="form-label">Question Statement</label>
-          <textarea class="form-textarea" id="edit-q-content" rows="4">${escapeHtml(q.content)}</textarea>
+          <label class="form-label">Question Statement (Markdown & Code Supported)</label>
+          <textarea class="form-textarea" id="edit-q-content" rows="6" style="line-height:1.5; font-size:0.92rem; tab-size:4;">${escapeHtml(q.content)}</textarea>
         </div>
 
         <!-- MCQ Options Section -->
@@ -1483,8 +1493,8 @@ async function editExistingQuestion(qId, examId) {
         <!-- Non-MCQ Model Answer Section -->
         <div id="edit-q-nonmcq-section" style="${!isMcq ? 'display:block' : 'display:none'}">
           <div class="form-group">
-            <label class="form-label" style="color:var(--accent-emerald);">Model / Correct Answer / Reference Code</label>
-            <textarea class="form-textarea" id="edit-q-correct-text" rows="4" style="font-family:${isProg ? 'monospace' : 'inherit'}; border-color:rgba(16,185,129,0.3); background:rgba(16,185,129,0.02);">${escapeHtml(typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer, null, 2) : (q.correct_answer || ''))}</textarea>
+            <label class="form-label" style="color:var(--accent-emerald);">Model / Correct Answer / Reference Code (Press Tab to Indent)</label>
+            <textarea class="form-textarea" id="edit-q-correct-text" rows="8" style="font-family:'JetBrains Mono', Consolas, monospace; font-size:0.88rem; line-height:1.5; tab-size:4; white-space:pre; border-color:rgba(16,185,129,0.3); background:#0d1117; color:#34d399;">${escapeHtml(typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer, null, 2) : (q.correct_answer || ''))}</textarea>
           </div>
         </div>
 
@@ -1494,6 +1504,9 @@ async function editExistingQuestion(qId, examId) {
         </div>
       </form>
     `);
+
+    setupCodeTextarea(document.getElementById('edit-q-correct-text'));
+    setupCodeTextarea(document.getElementById('edit-q-content'));
   } catch (err) {
     showToast(err.message, 'error');
   }

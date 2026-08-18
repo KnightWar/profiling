@@ -114,7 +114,11 @@ function normalizeQuestion(raw) {
   q.type = typeMap[q.type] || q.type;
 
   // Content
-  q.content = raw.content || raw.question || raw.Question || raw.text || '';
+  let content = raw.content || raw.question || raw.Question || raw.text || '';
+  if (typeof content === 'string' && content.includes('\\n') && !content.includes('\n')) {
+    content = content.replace(/\\n/g, '\n');
+  }
+  q.content = content;
 
   // Marks
   q.marks = parseInt(raw.marks || raw.Marks || raw.mark || 1) || 1;
@@ -132,7 +136,11 @@ function normalizeQuestion(raw) {
   }
 
   // Correct answer
-  q.correct_answer = raw.correct_answer || raw.correct || raw['Correct Answer'] || raw['correct answer'] || null;
+  let correctAnswer = raw.correct_answer || raw.correct || raw['Correct Answer'] || raw['correct answer'] || null;
+  if (typeof correctAnswer === 'string' && correctAnswer.includes('\\n') && !correctAnswer.includes('\n')) {
+    correctAnswer = correctAnswer.replace(/\\n/g, '\n');
+  }
+  q.correct_answer = correctAnswer;
 
   // Map numeric correct answers to letters (1=A, 2=B, etc.)
   if (q.correct_answer && !isNaN(q.correct_answer)) {

@@ -618,6 +618,77 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function renderRichContent(rawText) {
+  if (!rawText) return '';
+  let text = String(rawText);
+
+  // Normalize literal escaped newlines (e.g. "\\n" -> "\n") if no actual newlines exist
+  if (text.includes('\\n') && !text.includes('\n')) {
+    text = text.replace(/\\n/g, '\n');
+  }
+
+  // Handle Markdown code blocks ```lang\ncode\n```
+  text = text.replace(/```([a-zA-Z0-9_#-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    const language = lang.trim() || 'code';
+    return `
+      <div class="code-block-wrapper" style="margin: 12px 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); background: #0d1117;">
+        <div style="background: #161b22; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); font-size: 0.75rem; color: #8b949e; text-transform: uppercase; font-family: monospace; font-weight: 600;">
+          <span>${escapeHtml(language)}</span>
+          <button type="button" class="btn-copy-code" onclick="navigator.clipboard.writeText(this.closest('.code-block-wrapper').querySelector('code').innerText); showToast('Code copied!', 'success');" style="background: none; border: none; color: #8b949e; cursor: pointer; font-size: 0.75rem; padding: 2px 6px;">Copy</button>
+        </div>
+        <pre style="margin: 0; padding: 14px 16px; overflow-x: auto; font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; font-size: 0.9rem; line-height: 1.5; color: #e6edf3; white-space: pre;"><code class="language-${escapeHtml(language)}">${escapeHtml(code.trimEnd())}</code></pre>
+      </div>
+    `;
+  });
+
+  // Handle inline code `code`
+  text = text.replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.88em; color: var(--accent-emerald);">$1</code>');
+
+  // Handle Markdown headers
+  text = text.replace(/^### (.*$)/gim, '<h4 style="margin: 14px 0 6px; font-size: 1.05rem; font-weight: 700; color: var(--text-primary);">$1</h4>');
+  text = text.replace(/^## (.*$)/gim, '<h3 style="margin: 16px 0 8px; font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">$1</h3>');
+  text = text.replace(/^# (.*$)/gim, '<h2 style="margin: 18px 0 10px; font-size: 1.25rem; font-weight: 800; color: var(--text-primary);">$1</h2>');
+
+  // Handle bold & italic
+  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+  // Handle bullet list items
+  text = text.replace(/^- (.*$)/gim, '<li style="margin-left: 20px; list-style-type: disc;">$1</li>');
+
+  // Convert standalone newlines (outside code blocks) to <br> or paragraph breaks
+  const parts = text.split(/(<div class="code-block-wrapper"[\s\S]*?<\/div>)/g);
+  const formatted = parts.map(part => {
+    if (part.startsWith('<div class="code-block-wrapper"')) {
+      return part;
+    }
+    return part.replace(/\n\n+/g, '<div style="height: 8px;"></div>').replace(/\n/g, '<br>');
+  }).join('');
+
+  return formatted;
+}
+
+function setupCodeTextarea(textarea) {
+  if (!textarea || textarea.dataset.codeEnhanced) return;
+  textarea.dataset.codeEnhanced = 'true';
+  textarea.style.tabSize = '4';
+  textarea.addEventListener('keydown', function (e) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = this.selectionStart;
+      const end = this.selectionEnd;
+      const spaces = '    '; // 4 spaces for programming indentation
+      this.value = this.value.substring(0, start) + spaces + this.value.substring(end);
+      this.selectionStart = this.selectionEnd = start + spaces.length;
+      this.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+}
+
+window.escapeHtml = escapeHtml;
+window.renderRichContent = renderRichContent;
+window.setupCodeTextarea = setupCodeTextarea;
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════════════════════

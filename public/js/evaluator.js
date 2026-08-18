@@ -224,26 +224,34 @@ function buildEvaluatorQueueHtml() {
                   <!-- Question Content -->
                   <div style="margin-bottom: 14px;">
                     <div class="text-sm text-muted" style="margin-bottom: 4px; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px;">Question Statement</div>
-                    <div style="color: var(--text-primary); font-size: 0.95rem; line-height: 1.5; padding: 10px 14px; background: rgba(255,255,255,0.03); border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
-                      ${escapeHtml(r.question_content)}
+                    <div style="color: var(--text-primary); font-size: 0.95rem; line-height: 1.5; padding: 12px 14px; background: rgba(255,255,255,0.03); border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+                      ${renderRichContent(r.question_content)}
                     </div>
                   </div>
                   
                   <!-- Student Answer -->
                   <div style="margin-bottom: 14px;">
                     <div class="text-sm text-muted" style="margin-bottom: 4px; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px;">Student's Submitted Answer</div>
-                    <div style="color: var(--text-primary); padding: 12px 14px; border: 1px solid var(--border-color); border-radius: 6px; white-space: pre-wrap; font-family: ${r.question_type === 'programming' ? 'monospace' : 'inherit'}; background: var(--bg-surface); min-height: 48px; font-size: 0.92rem; line-height: 1.5;">
-                      ${escapeHtml(r.answer_data || 'No answer submitted')}
-                    </div>
+                    ${r.question_type === 'programming' ? `
+                      <pre style="margin:0; padding:12px 14px; background:#0d1117; border-radius:6px; font-family:'JetBrains Mono', Consolas, monospace; font-size:0.88rem; white-space:pre; overflow-x:auto; line-height:1.5; color:#f0f6fc;"><code>${escapeHtml(r.answer_data || 'No answer submitted')}</code></pre>
+                    ` : `
+                      <div style="color: var(--text-primary); padding: 12px 14px; border: 1px solid var(--border-color); border-radius: 6px; white-space: pre-wrap; background: var(--bg-surface); min-height: 48px; font-size: 0.92rem; line-height: 1.5;">
+                        ${escapeHtml(r.answer_data || 'No answer submitted')}
+                      </div>
+                    `}
                   </div>
                   
                   <!-- Model Answer (if any) -->
                   ${r.correct_answer ? `
                   <div style="margin-bottom: 14px;">
                     <div class="text-sm" style="color: var(--accent-emerald); margin-bottom: 4px; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px;">Model / Correct Answer</div>
-                    <div style="color: var(--text-secondary); padding: 10px 14px; border: 1px solid rgba(16,185,129,0.25); border-radius: 6px; white-space: pre-wrap; background: rgba(16,185,129,0.04); font-size: 0.9rem;">
-                      ${escapeHtml(r.correct_answer)}
-                    </div>
+                    ${r.question_type === 'programming' ? `
+                      <pre style="margin:0; padding:12px 14px; background:#0d1117; border:1px solid rgba(16,185,129,0.3); border-radius:6px; font-family:'JetBrains Mono', Consolas, monospace; font-size:0.88rem; white-space:pre; overflow-x:auto; line-height:1.5; color:#34d399;"><code>${escapeHtml(typeof r.correct_answer === 'object' ? JSON.stringify(r.correct_answer, null, 2) : r.correct_answer)}</code></pre>
+                    ` : `
+                      <div style="color: var(--text-secondary); padding: 10px 14px; border: 1px solid rgba(16,185,129,0.25); border-radius: 6px; white-space: pre-wrap; background: rgba(16,185,129,0.04); font-size: 0.9rem;">
+                        ${escapeHtml(r.correct_answer)}
+                      </div>
+                    `}
                   </div>
                   ` : ''}
                   

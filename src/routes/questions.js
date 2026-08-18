@@ -197,7 +197,8 @@ router.post('/exams/:id/questions/generate', async (req, res, next) => {
       typeMix,
     });
   } catch (err) {
-    next(err);
+    console.error('AI Generation Route Error:', err);
+    res.status(500).json({ error: err.message || 'Generation failed' });
   }
 });
 

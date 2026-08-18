@@ -60,6 +60,7 @@ Each JSON object must follow:
 
 Rules:
 - Return a valid JSON array only.
+- ALL strings (especially the Python code) MUST be properly escaped for JSON (use \\n for newlines in code strings, escape double quotes).
 - Each question must have at least 2 test cases.
 - Problem statements must be clear with input/output formats.
 - Mix of difficulties targeting ~25 total marks across all questions.

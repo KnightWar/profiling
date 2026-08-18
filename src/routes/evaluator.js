@@ -13,11 +13,11 @@ const router = express.Router();
 router.use(requireRole('admin', 'evaluator'));
 
 // ─── GET /api/evaluator/queue ───────────────────────────────────────────────
-// Get pending responses to score
+// Get responses to score / review
 router.get('/queue', async (req, res, next) => {
   try {
     const db = getDb();
-    const { status = 'pending_review', component_id, exam_id, page = 1, limit = 50 } = req.query;
+    const { status = 'all', component_id, exam_id, page = 1, limit = 500 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
     let sql = `
@@ -25,7 +25,7 @@ router.get('/queue', async (req, res, next) => {
              r.submitted_at, r.status,
              u.name as student_name, u.roll_no,
              q.type as question_type, q.marks as max_marks, q.content as question_content,
-             q.rubric, q.correct_answer,
+             q.rubric, q.correct_answer, q.options, q.sort_order,
              e.title as exam_title, e.exam_number,
              c.display_name as component_name, c.id as component_id,
              s.marks_awarded, s.feedback, s.scored_by
@@ -35,16 +35,14 @@ router.get('/queue', async (req, res, next) => {
       JOIN exams e ON e.id = r.exam_id
       JOIN components c ON c.id = e.component_id
       LEFT JOIN scores s ON s.response_id = r.id
-      WHERE r.status IN ('submitted', 'pending_review', 'flagged')
-        AND q.type IN ('subjective', 'programming', 'oral_task', 'writing_task')
+      WHERE 1=1
     `;
     const params = [];
 
-    if (status === 'graded') {
-      sql = sql.replace(
-        "r.status IN ('submitted', 'pending_review', 'flagged')",
-        "r.status = 'graded'"
-      );
+    if (status === 'pending') {
+      sql += " AND (r.status IN ('submitted', 'pending_review', 'flagged') OR s.marks_awarded IS NULL)";
+    } else if (status === 'graded') {
+      sql += " AND (r.status = 'graded' AND s.marks_awarded IS NOT NULL)";
     }
 
     if (component_id) {
@@ -57,7 +55,7 @@ router.get('/queue', async (req, res, next) => {
       params.push(parseInt(exam_id));
     }
 
-    sql += ' ORDER BY r.submitted_at ASC LIMIT ? OFFSET ?';
+    sql += ' ORDER BY u.name ASC, e.id ASC, q.sort_order ASC, q.id ASC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), offset);
 
     const responses = await db.prepare(sql).all(...params);
@@ -65,7 +63,8 @@ router.get('/queue', async (req, res, next) => {
     // Parse JSON fields
     const parsed = responses.map(r => ({
       ...r,
-      rubric: r.rubric ? JSON.parse(r.rubric) : null,
+      rubric: r.rubric ? (typeof r.rubric === 'string' ? JSON.parse(r.rubric) : r.rubric) : null,
+      options: r.options ? (typeof r.options === 'string' ? JSON.parse(r.options) : r.options) : null,
     }));
 
     // Get total count
@@ -73,11 +72,9 @@ router.get('/queue', async (req, res, next) => {
       SELECT COUNT(*) as c FROM responses r
       JOIN questions q ON q.id = r.question_id
       JOIN exams e ON e.id = r.exam_id
-      WHERE r.status IN ('submitted', 'pending_review', 'flagged')
-        AND q.type IN ('subjective', 'programming', 'oral_task', 'writing_task')
     `;
     const countObj = await db.prepare(countSql).get();
-    const total = countObj.c;
+    const total = countObj?.c || parsed.length;
 
     res.json({ responses: parsed, total, page: parseInt(page), limit: parseInt(limit) });
   } catch (err) {

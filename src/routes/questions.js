@@ -65,36 +65,36 @@ router.post('/exams/:id/questions', async (req, res, next) => {
       return res.status(404).json({ error: 'Exam not found' });
     }
 
-    const { type, marks, content, options, correct_answer, test_cases, rubric, difficulty } = req.body;
-
-    if (!type || !marks || !content) {
-      return res.status(400).json({ error: 'type, marks, and content are required' });
-    }
+    const normalized = normalizeQuestionForStorage(req.body, 'manual');
 
     // Validate MCQ has options
-    if (type === 'mcq' && (!options || !Array.isArray(options) || options.length < 2)) {
-      return res.status(400).json({ error: 'MCQ requires at least 2 options' });
+    if (normalized.type === 'mcq') {
+      const opts = normalized.options ? JSON.parse(normalized.options) : [];
+      if (opts.length < 2) {
+        return res.status(400).json({ error: 'MCQ requires at least 2 options' });
+      }
     }
 
     const maxSort = await db.prepare('SELECT MAX(sort_order) as m FROM questions WHERE exam_id = ?').get(req.params.id);
 
     const result = await db.prepare(`
       INSERT INTO questions (exam_id, type, marks, content, options, correct_answer, test_cases, rubric, sort_order, source, difficulty)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       req.params.id,
-      type,
-      marks,
-      content,
-      options ? JSON.stringify(options) : null,
-      correct_answer || null,
-      test_cases ? JSON.stringify(test_cases) : null,
-      rubric ? JSON.stringify(rubric) : null,
+      normalized.type,
+      normalized.marks,
+      normalized.content,
+      normalized.options,
+      normalized.correct_answer,
+      normalized.test_cases,
+      normalized.rubric,
       (maxSort?.m || 0) + 1,
-      difficulty || 'medium'
+      normalized.source,
+      normalized.difficulty
     );
 
-    res.status(201).json({ message: 'Question added', question_id: result.lastInsertRowid });
+    res.status(201).json({ message: 'Question added successfully', question_id: result.lastInsertRowid });
   } catch (err) {
     next(err);
   }
@@ -120,23 +120,25 @@ router.post('/exams/:id/questions/upload', upload.single('file'), async (req, re
 
     const insert = db.prepare(`
       INSERT INTO questions (exam_id, type, marks, content, options, correct_answer, test_cases, rubric, sort_order, source, difficulty)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     let count = 0;
-    for (const q of questions) {
+    for (const rawQ of questions) {
+      const q = normalizeQuestionForStorage(rawQ, 'manual');
       sortOrder++;
       await insert.run(
         req.params.id,
-        q.type || 'mcq',
-        q.marks || 1,
-        q.content || q.question,
-        q.options ? JSON.stringify(q.options) : null,
-        q.correct_answer || q.correct || null,
-        q.test_cases ? JSON.stringify(q.test_cases) : null,
-        q.rubric ? JSON.stringify(q.rubric) : null,
+        q.type,
+        q.marks,
+        q.content,
+        q.options,
+        q.correct_answer,
+        q.test_cases,
+        q.rubric,
         sortOrder,
-        q.difficulty || 'medium'
+        q.source,
+        q.difficulty
       );
       count++;
     }
@@ -154,7 +156,7 @@ router.post('/exams/:id/questions/upload', upload.single('file'), async (req, re
 });
 
 // ─── POST /api/admin/exams/:id/questions/generate ───────────────────────────
-// AI Generate questions via Gemini
+// Generate questions using Gemini AI
 router.post('/exams/:id/questions/generate', async (req, res, next) => {
   try {
     const db = getDb();
@@ -176,14 +178,21 @@ router.post('/exams/:id/questions/generate', async (req, res, next) => {
     }
 
     // Use provided question types or fall back to component defaults
-    const typeMix = questionTypes || JSON.parse(exam.default_mix || exam.question_type_mix || '{}');
+    let typeMix = questionTypes;
+    if (!typeMix && exam) {
+      try {
+        typeMix = JSON.parse(exam.default_mix || exam.question_type_mix || '{}');
+      } catch (e) {
+        typeMix = {};
+      }
+    }
 
     const generated = await generateQuestions({
       topic,
       description: description || '',
       difficulty: difficulty || 'medium',
-      component: exam.component_name,
-      typeMix,
+      component: exam.component_name || 'technical',
+      typeMix: typeMix || {},
     });
 
     // Return preview (don't save yet — let admin review first)
@@ -224,23 +233,25 @@ router.post('/exams/:id/questions/save-generated', async (req, res, next) => {
 
       const insert = db.prepare(`
         INSERT INTO questions (exam_id, type, marks, content, options, correct_answer, test_cases, rubric, sort_order, source, difficulty)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ai_generated', ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       let count = 0;
-      for (const q of questions) {
+      for (const rawQ of questions) {
+        const q = normalizeQuestionForStorage(rawQ, 'ai_generated');
         sortOrder++;
         await insert.run(
           req.params.id,
           q.type,
           q.marks,
-          q.content || q.question,
-          q.options ? JSON.stringify(q.options) : null,
-          q.correct_answer !== null && typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer) : (q.correct_answer || q.correct || null),
-          q.test_cases ? JSON.stringify(q.test_cases) : null,
-          q.rubric ? JSON.stringify(q.rubric) : null,
+          q.content,
+          q.options,
+          q.correct_answer,
+          q.test_cases,
+          q.rubric,
           sortOrder,
-          q.difficulty || 'medium'
+          q.source,
+          q.difficulty
         );
         count++;
       }
@@ -263,28 +274,26 @@ router.put('/questions/:id', async (req, res, next) => {
       return res.status(404).json({ error: 'Question not found' });
     }
 
-    const { type, marks, content, options, correct_answer, test_cases, rubric, difficulty, sort_order } = req.body;
-    const updates = [];
-    const params = [];
+    const normalized = normalizeQuestionForStorage({ ...question, ...req.body }, question.source || 'manual');
 
-    if (type !== undefined) { updates.push('type = ?'); params.push(type); }
-    if (marks !== undefined) { updates.push('marks = ?'); params.push(marks); }
-    if (content !== undefined) { updates.push('content = ?'); params.push(content); }
-    if (options !== undefined) { updates.push('options = ?'); params.push(JSON.stringify(options)); }
-    if (correct_answer !== undefined) { updates.push('correct_answer = ?'); params.push(correct_answer); }
-    if (test_cases !== undefined) { updates.push('test_cases = ?'); params.push(JSON.stringify(test_cases)); }
-    if (rubric !== undefined) { updates.push('rubric = ?'); params.push(JSON.stringify(rubric)); }
-    if (difficulty !== undefined) { updates.push('difficulty = ?'); params.push(difficulty); }
-    if (sort_order !== undefined) { updates.push('sort_order = ?'); params.push(sort_order); }
+    await db.prepare(`
+      UPDATE questions SET
+        type = ?, marks = ?, content = ?, options = ?, correct_answer = ?,
+        test_cases = ?, rubric = ?, difficulty = ?
+      WHERE id = ?
+    `).run(
+      normalized.type,
+      normalized.marks,
+      normalized.content,
+      normalized.options,
+      normalized.correct_answer,
+      normalized.test_cases,
+      normalized.rubric,
+      normalized.difficulty,
+      req.params.id
+    );
 
-    if (updates.length === 0) {
-      return res.status(400).json({ error: 'No fields to update' });
-    }
-
-    params.push(req.params.id);
-    await db.prepare(`UPDATE questions SET ${updates.join(', ')} WHERE id = ?`).run(...params);
-
-    res.json({ message: 'Question updated' });
+    res.json({ message: 'Question updated successfully' });
   } catch (err) {
     next(err);
   }

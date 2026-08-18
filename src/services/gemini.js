@@ -13,149 +13,240 @@ const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/
 
 const COMPONENT_PROMPTS = {
   technical: {
-    mcq: (topic, desc, count, diff) => `You are an expert technical quiz creator.
+    mcq: (topic, desc, count, diff) => `You are a principal software engineering and technical assessment architect.
 
 Topic: ${topic}
-Description: ${desc}
-Difficulty: ${diff}
-Generate exactly ${count} MCQ questions. Each worth 1 mark.
+Additional Context / Language / Tech Stack: ${desc || 'General / Core concepts'}
+Difficulty Level: ${diff}
+Target: Generate exactly ${count} high-quality Multiple Choice Questions (MCQs). Each worth 1 mark.
 
-Each JSON object must follow:
-{ "type": "mcq", "marks": 1, "content": "question text", "options": ["A) ...", "B) ...", "C) ...", "D) ..."], "correct_answer": "A"|"B"|"C"|"D" }
+Output Format: Return a raw JSON array of objects with this EXACT structure:
+[
+  {
+    "type": "mcq",
+    "marks": 1,
+    "difficulty": "${diff}",
+    "content": "Clear, unambiguous question statement. If including code snippets, format them cleanly.",
+    "options": [
+      "Option A description without 'A)' prefix",
+      "Option B description without 'B)' prefix",
+      "Option C description without 'C)' prefix",
+      "Option D description without 'D)' prefix"
+    ],
+    "correct_answer": "A"
+  }
+]
 
-Rules:
-- Return a valid JSON array only — no markdown, no extra text.
-- Questions must be clear, technically accurate, relevant to ${topic}.
-- Cover different aspects of the topic. No repetition.
-- Difficulty level: ${diff}.
+Strict Rules:
+- Return ONLY the JSON array (no markdown code blocks, no intro/outro).
+- "correct_answer" MUST be exactly one uppercase letter: "A", "B", "C", or "D".
+- "options" MUST be an array of exactly 4 strings. Do NOT include prefixes like "A)" or "1." inside the option text.
+- Ensure technical accuracy, distinct plausible distractors, and no duplicates.`,
 
-Return JSON array only.`,
-
-    subjective: (topic, desc, count, diff) => `You are an expert technical examiner.
-
-Topic: ${topic}
-Description: ${desc}
-Difficulty: ${diff}
-Generate exactly ${count} subjective/short-answer questions. Each worth 2 marks.
-
-Each JSON object must follow:
-{ "type": "subjective", "marks": 2, "content": "question text", "correct_answer": "model answer (50-100 words)" }
-
-Rules:
-- Return a valid JSON array only.
-- Questions should require explanation, not just recall.
-- Difficulty level: ${diff}.
-
-Return JSON array only.`,
-
-    programming: (topic, desc, count, diff) => `You are an expert programming question designer.
+    subjective: (topic, desc, count, diff) => `You are a lead technical interviewer and evaluator.
 
 Topic: ${topic}
-Description: ${desc}
-Difficulty: ${diff}
-Generate exactly ${count} programming questions. Marks vary: easy=3, medium=5, hard=7. Aim for total ~25 marks.
+Additional Context: ${desc || 'General technical domain'}
+Difficulty Level: ${diff}
+Target: Generate exactly ${count} deep technical / conceptual questions. Each worth 2 to 5 marks.
 
-Each JSON object must follow:
-{ "type": "programming", "marks": <number>, "content": "problem statement with input/output format", "correct_answer": "solution code in Python", "test_cases": [{"input": "...", "expected": "..."}, ...] }
+Output Format: Return a raw JSON array of objects with this EXACT structure:
+[
+  {
+    "type": "subjective",
+    "marks": 2,
+    "difficulty": "${diff}",
+    "content": "Detailed technical question testing architecture, internal mechanisms, trade-offs, or debugging.",
+    "correct_answer": "Comprehensive model answer (75-150 words) including key technical terms, algorithmic principles, or code snippets."
+  }
+]
 
-Rules:
-- Return a valid JSON array only.
-- ALL strings (especially the Python code) MUST be properly escaped for JSON (use \\n for newlines in code strings, escape double quotes).
-- Each question must have at least 2 test cases.
-- Problem statements must be clear with input/output formats.
-- Mix of difficulties targeting ~25 total marks across all questions.
+Strict Rules:
+- Return ONLY the JSON array.
+- "correct_answer" must provide a thorough, accurate reference answer for evaluators to grade against.`,
 
-Return JSON array only.`,
+    programming: (topic, desc, count, diff) => `You are a competitive programming problem setter and staff software engineer.
+
+Topic: ${topic}
+Target Programming Language / Stack: ${desc || 'Python / Universal (or specified language in topic/description)'}
+Difficulty Level: ${diff}
+Target: Generate exactly ${count} complete programming challenges. Marks: easy=3, medium=5, hard=8.
+
+Output Format: Return a raw JSON array of objects with this EXACT structure:
+[
+  {
+    "type": "programming",
+    "marks": 5,
+    "difficulty": "${diff}",
+    "content": "### Problem Description\\nState the problem clearly with background and objectives.\\n\\n### Input Format\\nDescribe input arguments or stdin format.\\n\\n### Output Format\\nDescribe expected return value or stdout.\\n\\n### Constraints\\n- Time Complexity: O(...)\\n- Space Complexity: O(...)\\n- 1 <= N <= 10^5\\n\\n### Example 1\\n**Input:** ...\\n**Output:** ...\\n**Explanation:** ...\\n\\n### Example 2\\n**Input:** ...\\n**Output:** ...",
+    "correct_answer": "def solve(args):\\n    # Clean, syntactically correct, optimized reference solution\\n    pass",
+    "test_cases": [
+      { "input": "sample_input_1", "expected": "sample_output_1" },
+      { "input": "sample_input_2", "expected": "sample_output_2" },
+      { "input": "sample_input_3", "expected": "sample_output_3" }
+    ]
+  }
+]
+
+Strict Rules:
+- Return ONLY the JSON array.
+- "content" MUST use clean Markdown with Problem Description, Input/Output Format, Constraints, and Examples.
+- "correct_answer" MUST contain clean, valid, syntactically correct code in the requested language (or Python if unspecified) with proper indentation. Escape quotes and newlines properly (\\\\n).
+- Provide at least 3 concrete test cases in "test_cases".`,
   },
 
   aptitude: {
-    mcq: (topic, desc, count, diff) => `You are an expert logical reasoning and aptitude quiz creator.
+    mcq: (topic, desc, count, diff) => `You are an expert quantitative aptitude and logical reasoning examiner for top competitive assessments.
 
 Topic: ${topic}
-Description: ${desc}
-Difficulty: ${diff}
-Generate exactly ${count} MCQ questions testing logical/analytical reasoning. Each worth 1 mark.
+Specific Focus: ${desc || 'Arithmetic, Algebra, Data Interpretation, Logical Deductions, Series, Syllogisms, Blood Relations'}
+Difficulty Level: ${diff}
+Target: Generate exactly ${count} Aptitude / Logical Reasoning MCQs. Each worth 1 mark.
 
-Each JSON object must follow:
-{ "type": "mcq", "marks": 1, "content": "question text", "options": ["A) ...", "B) ...", "C) ...", "D) ..."], "correct_answer": "A"|"B"|"C"|"D" }
+Output Format: Return a raw JSON array of objects with this EXACT structure:
+[
+  {
+    "type": "mcq",
+    "marks": 1,
+    "difficulty": "${diff}",
+    "content": "Clear mathematical or logical puzzle with all necessary numbers, statements, and conditions.",
+    "options": [
+      "Option A numerical or text answer",
+      "Option B numerical or text answer",
+      "Option C numerical or text answer",
+      "Option D numerical or text answer"
+    ],
+    "correct_answer": "A"
+  }
+]
 
-Categories to cover: number series, pattern recognition, logical deduction, data interpretation, verbal reasoning, quantitative aptitude.
-Difficulty level: ${diff}.
+Strict Rules:
+- Return ONLY the JSON array.
+- "correct_answer" MUST be exactly one uppercase letter: "A", "B", "C", or "D".
+- All mathematical values and logical conditions must be verified and consistent.
+- Options must be 4 distinct choices without prefixes.`,
 
-Return JSON array only.`,
-
-    subjective: (topic, desc, count, diff) => `You are an expert aptitude examiner.
+    subjective: (topic, desc, count, diff) => `You are a senior aptitude evaluator.
 
 Topic: ${topic}
-Description: ${desc}
-Difficulty: ${diff}
-Generate exactly ${count} subjective aptitude questions requiring detailed working/reasoning. Each worth 3 marks.
+Focus: ${desc || 'Quantitative reasoning and logical proof'}
+Difficulty Level: ${diff}
+Target: Generate exactly ${count} multi-step problem-solving questions. Each worth 3 to 5 marks.
 
-Each JSON object must follow:
-{ "type": "subjective", "marks": 3, "content": "question text", "correct_answer": "step-by-step solution" }
+Output Format: Return a raw JSON array of objects with this EXACT structure:
+[
+  {
+    "type": "subjective",
+    "marks": 3,
+    "difficulty": "${diff}",
+    "content": "Problem requiring structured algebraic calculation, probability calculation, or logical deduction steps.",
+    "correct_answer": "Step 1: Formula / Approach...\\nStep 2: Substitution & Calculation...\\nStep 3: Final Answer: ..."
+  }
+]
 
-Return JSON array only.`,
+Strict Rules:
+- Return ONLY the JSON array.
+- "correct_answer" must contain the complete step-by-step mathematical working and final solution.`,
   },
 
   oral_english: {
-    oral_task: (topic, desc, count, diff) => `You are an expert English speaking assessment designer.
+    oral_task: (topic, desc, count, diff) => `You are an international English language assessment and IELTS/CEFR speech evaluator.
 
 Topic: ${topic}
-Description: ${desc}
-Difficulty: ${diff}
-Generate exactly ${count} oral read-aloud assessment tasks. Each worth 10 marks.
+Context: ${desc || 'Professional communication, technical presentation, or conversational fluency'}
+Difficulty Level: ${diff}
+Target: Generate exactly ${count} oral tasks (read aloud or speech prompts). Each worth 10 marks.
 
-Each JSON object must follow:
-{ "type": "oral_task", "marks": 10, "content": "Please read the following passage clearly:", "correct_answer": "The actual passage text the student must read aloud" }
+Output Format: Return a raw JSON array of objects with this EXACT structure:
+[
+  {
+    "type": "oral_task",
+    "marks": 10,
+    "difficulty": "${diff}",
+    "content": "### Read Aloud & Speaking Task\\nPlease read the passage below aloud into your microphone clearly and at a natural pace:\\n\\n\\"[Passage Text to read aloud]\\"",
+    "correct_answer": "[Passage Text for transcription and speech-to-text alignment]"
+  }
+]
 
-Rules:
-- Return a valid JSON array with exactly ${count} objects.
-- Passages should be appropriate for ${diff} level English speakers.
-- Passages should be 2-4 sentences long.
-
-Return JSON array only.`,
+Strict Rules:
+- Return ONLY the JSON array.
+- Passages must feature rich vocabulary, varied sentence structures, and natural cadence appropriate for ${diff} CEFR levels.`,
   },
 
   written_english: {
-    mcq: (topic, desc, count, diff) => `You are an expert English language quiz creator.
+    mcq: (topic, desc, count, diff) => `You are a professional English language and verbal ability examiner.
 
 Topic: ${topic}
-Description: ${desc}
-Difficulty: ${diff}
-Generate exactly ${count} MCQ questions testing English grammar, vocabulary, comprehension. Each worth 1 mark.
+Focus: ${desc || 'Grammar, sentence correction, vocabulary in context, idioms, reading comprehension'}
+Difficulty Level: ${diff}
+Target: Generate exactly ${count} Verbal Ability MCQs. Each worth 1 mark.
 
-Each JSON object must follow:
-{ "type": "mcq", "marks": 1, "content": "question text", "options": ["A) ...", "B) ...", "C) ...", "D) ..."], "correct_answer": "A"|"B"|"C"|"D" }
+Output Format: Return a raw JSON array of objects with this EXACT structure:
+[
+  {
+    "type": "mcq",
+    "marks": 1,
+    "difficulty": "${diff}",
+    "content": "Grammar correction, spot the error, fill in the blank, or comprehension question.",
+    "options": [
+      "Choice A",
+      "Choice B",
+      "Choice C",
+      "Choice D"
+    ],
+    "correct_answer": "A"
+  }
+]
 
-Mix of: grammar correction, fill-in-the-blank, reading comprehension, vocabulary usage.
-Difficulty level: ${diff}.
+Strict Rules:
+- Return ONLY the JSON array.
+- "correct_answer" MUST be "A", "B", "C", or "D".`,
 
-Return JSON array only.`,
-
-    subjective: (topic, desc, count, diff) => `You are an expert English writing examiner.
+    subjective: (topic, desc, count, diff) => `You are an expert English writing instructor.
 
 Topic: ${topic}
-Description: ${desc}
-Difficulty: ${diff}
-Generate exactly ${count} subjective English questions (sentence correction, paragraph writing, comprehension answers). Each worth 2-4 marks.
+Focus: ${desc || 'Short essay answers, summary writing, précis, paragraph rewriting'}
+Difficulty Level: ${diff}
+Target: Generate exactly ${count} subjective writing questions. Each worth 2 to 5 marks.
 
-Each JSON object must follow:
-{ "type": "subjective", "marks": <number 2-4>, "content": "question text", "correct_answer": "model answer" }
+Output Format: Return a raw JSON array:
+[
+  {
+    "type": "subjective",
+    "marks": 3,
+    "difficulty": "${diff}",
+    "content": "Write a concise paragraph or rewrite the passage to improve clarity and tone...",
+    "correct_answer": "Exemplary model response illustrating correct tone, coherence, grammar, and vocabulary."
+  }
+]
 
-Total marks should sum to approximately 20.
-Return JSON array only.`,
+Strict Rules:
+- Return ONLY the JSON array.`,
 
-    writing_task: (topic, desc, count, diff) => `You are an expert business writing assessment designer.
+    writing_task: (topic, desc, count, diff) => `You are a corporate communication assessment designer.
 
 Topic: ${topic}
-Description: ${desc}
-Difficulty: ${diff}
-Generate exactly ${count} writing task(s) — email writing, report writing, or formal letter. Worth 15 marks total.
+Focus: ${desc || 'Formal email, incident report, executive proposal, or business letter'}
+Difficulty Level: ${diff}
+Target: Generate exactly ${count} comprehensive business writing task. Worth 15 marks.
 
-Each JSON object must follow:
-{ "type": "writing_task", "marks": 15, "content": "detailed task description with context, audience, and requirements", "rubric": {"criteria": ["content_relevance","organization","language_accuracy","tone_appropriateness","format"], "max_per_criterion": 3} }
+Output Format: Return a raw JSON array:
+[
+  {
+    "type": "writing_task",
+    "marks": 15,
+    "difficulty": "${diff}",
+    "content": "### Business Writing Prompt\\n\\n**Scenario:** ...\\n**Task:** Write a formal email / report to [Audience].\\n\\n**Requirements:**\\n- State the primary objective clearly.\\n- Provide 3 actionable points.\\n- Maintain a professional, courteous tone.\\n- Word count: 150-250 words.",
+    "correct_answer": "Exemplary full-length model document meeting all prompt requirements.",
+    "rubric": {
+      "criteria": ["content_relevance", "structure_organization", "grammar_vocabulary", "tone_style", "formatting"],
+      "max_per_criterion": 3
+    }
+  }
+]
 
-Return JSON array only.`,
+Strict Rules:
+- Return ONLY the JSON array.`,
   },
 };
 
@@ -187,8 +278,28 @@ async function callGemini(prompt) {
   }
 
   // Strip markdown code fences if present
-  const cleaned = text.replace(/^```[a-zA-Z]*\n?/, '').replace(/\n?```$/, '').trim();
-  return JSON.parse(cleaned);
+  let cleaned = text.trim();
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.substring(7);
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.substring(3);
+  }
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.substring(0, cleaned.length - 3);
+  }
+  cleaned = cleaned.trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (parseErr) {
+    // If there is leading/trailing text outside the JSON array, extract between first [ and last ]
+    const firstBracket = cleaned.indexOf('[');
+    const lastBracket = cleaned.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+      return JSON.parse(cleaned.substring(firstBracket, lastBracket + 1));
+    }
+    throw parseErr;
+  }
 }
 
 // ─── Main generation function ───────────────────────────────────────────────
@@ -199,38 +310,56 @@ async function callGemini(prompt) {
  * @param {string} opts.topic - Topic for the questions
  * @param {string} opts.description - Additional description
  * @param {string} opts.difficulty - easy/medium/hard
- * @param {string} opts.component - technical/aptitude/oral_english/written_english
+ * @param {string} opts.component - technical/aptitude/oral_english/written_english or custom
  * @param {Object} opts.typeMix - {mcq: 15, subjective: 10, programming: 25}
  * @returns {Array} Generated questions
  */
-async function generateQuestions({ topic, description, difficulty, component, typeMix }) {
-  const componentPrompts = COMPONENT_PROMPTS[component];
-  if (!componentPrompts) {
-    throw new Error(`Unknown component: ${component}. Valid: ${Object.keys(COMPONENT_PROMPTS).join(', ')}`);
+async function generateQuestions({ topic, description, difficulty = 'medium', component = 'technical', typeMix = {} }) {
+  // Normalize component or fallback to technical
+  const normComponent = (component && COMPONENT_PROMPTS[component.toLowerCase()]) ? component.toLowerCase() : 'technical';
+  const componentPrompts = COMPONENT_PROMPTS[normComponent] || COMPONENT_PROMPTS.technical;
+
+  // If typeMix is empty or all zero, assign a sensible default
+  let effectiveMix = typeMix;
+  if (!effectiveMix || typeof effectiveMix !== 'object' || Object.keys(effectiveMix).length === 0 || Object.values(effectiveMix).every(v => v <= 0)) {
+    if (normComponent === 'oral_english') {
+      effectiveMix = { oral_task: 40 };
+    } else if (normComponent === 'written_english') {
+      effectiveMix = { mcq: 10, subjective: 10, writing_task: 15 };
+    } else if (normComponent === 'aptitude') {
+      effectiveMix = { mcq: 15, subjective: 10 };
+    } else {
+      effectiveMix = { mcq: 10, subjective: 10, programming: 15 };
+    }
   }
 
   const allQuestions = [];
 
-  for (const [qType, totalMarks] of Object.entries(typeMix)) {
+  for (const [qType, totalMarks] of Object.entries(effectiveMix)) {
     if (totalMarks <= 0) continue;
 
-    const promptBuilder = componentPrompts[qType];
+    // Look for prompt builder in current component or fallback to technical / written_english / oral_english
+    const promptBuilder = componentPrompts[qType] ||
+      COMPONENT_PROMPTS.technical[qType] ||
+      COMPONENT_PROMPTS.written_english[qType] ||
+      COMPONENT_PROMPTS.oral_english[qType];
+
     if (!promptBuilder) {
-      console.warn(`  No prompt template for ${component}/${qType}, skipping`);
+      console.warn(`  No prompt template for ${normComponent}/${qType}, skipping`);
       continue;
     }
 
     // Estimate count based on marks
     let count;
-    if (qType === 'mcq') count = totalMarks; // 1 mark each
+    if (qType === 'mcq') count = Math.min(totalMarks, 15); // max 15 per batch for fast response
     else if (qType === 'oral_task') count = 4; // fixed 4 tasks
     else if (qType === 'writing_task') count = 1; // single task
-    else if (qType === 'programming') count = Math.ceil(totalMarks / 5); // ~5 marks each
-    else count = Math.ceil(totalMarks / 2); // subjective ~2-3 marks each
+    else if (qType === 'programming') count = Math.max(1, Math.min(Math.ceil(totalMarks / 5), 4)); // 1-4 programming questions
+    else count = Math.max(1, Math.min(Math.ceil(totalMarks / 2), 5)); // 1-5 subjective questions
 
     const prompt = promptBuilder(topic, description, count, difficulty);
 
-    console.log(`  Generating ${count}x ${qType} for ${component}...`);
+    console.log(`  Generating ${count}x ${qType} for ${normComponent}...`);
 
     try {
       const questions = await callGemini(prompt);
@@ -254,7 +383,6 @@ async function generateQuestions({ topic, description, difficulty, component, ty
       }
     } catch (err) {
       console.error(`  ✗ Failed to generate ${qType}: ${err.message}`);
-      // If we completely fail to generate anything, throw the error
       if (allQuestions.length === 0) {
         throw new Error(`AI Generation Failed: ${err.message}`);
       }

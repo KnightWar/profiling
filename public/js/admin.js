@@ -878,14 +878,16 @@ async function renderQuestionManager(isBackground = false) {
         </div>
       </div>
 
-      <div class="card mb-lg">
-        <div class="form-group">
-          <label class="form-label">Select Exam</label>
-          <select class="form-select" id="qm-exam-select" onchange="loadExamQuestions(this.value)">
-            <option value="">— Select an exam —</option>
+      <div class="card mb-lg" style="padding: 20px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+        <div class="form-group mb-0">
+          <label class="form-label" style="font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <i class="ph ph-file-text" style="color: var(--accent-indigo);"></i> Select Exam to Manage Questions
+          </label>
+          <select class="form-select form-select-lg" id="qm-exam-select" onchange="loadExamQuestions(this.value)" style="font-size: 1rem; font-weight: 500; padding: 12px 16px; border-radius: var(--radius-sm); border: 1.5px solid var(--border-color); background-color: var(--bg-body); transition: all 0.2s ease;">
+            <option value="">— Select an exam to view & edit questions —</option>
             ${examData.exams.map(e => `
               <option value="${e.id}" ${e.id == selectedExamId ? 'selected' : ''}>
-                ${e.component_name} — ${e.title} (${e.question_count} Qs, ${e.total_question_marks}/${e.total_marks} marks)
+                ${e.component_name} — ${e.title} (Exam #${e.exam_number} • ${e.question_count} Qs • ${e.total_question_marks || 0}/${e.total_marks} marks)
               </option>
             `).join('')}
           </select>
@@ -924,23 +926,23 @@ async function loadExamQuestions(examId, isBackground = false) {
     container.innerHTML = `
       <!-- Tabs: Questions / AI Generate / Upload -->
       <div class="tabs">
-        <button class="tab active" data-tab="qm-existing" onclick="switchQmTab(this, 'qm-existing')">
+        <button class="tab ${activeTabName === 'qm-existing' ? 'active' : ''}" data-tab="qm-existing" onclick="switchQmTab(this, 'qm-existing')">
           <i class="ph ph-clipboard-text"></i> Questions (${data.summary.questionCount})
         </button>
-        <button class="tab" data-tab="qm-manual" onclick="switchQmTab(this, 'qm-manual')">
+        <button class="tab ${activeTabName === 'qm-manual' ? 'active' : ''}" data-tab="qm-manual" onclick="switchQmTab(this, 'qm-manual')">
           <i class="ph ph-pencil-simple"></i> Add Manual
         </button>
-        <button class="tab" data-tab="qm-ai" onclick="switchQmTab(this, 'qm-ai')">
+        <button class="tab ${activeTabName === 'qm-ai' ? 'active' : ''}" data-tab="qm-ai" onclick="switchQmTab(this, 'qm-ai')">
           <i class="ph ph-robot"></i> AI Generate
         </button>
-        <button class="tab" data-tab="qm-upload" onclick="switchQmTab(this, 'qm-upload')">
+        <button class="tab ${activeTabName === 'qm-upload' ? 'active' : ''}" data-tab="qm-upload" onclick="switchQmTab(this, 'qm-upload')">
           <i class="ph ph-folder"></i> Upload File
         </button>
       </div>
 
       <!-- TAB: Existing Questions -->
-      <div class="tab-content active" id="qm-existing">
-        <div class="flex justify-between items-center mb-md">
+      <div class="tab-content ${activeTabName === 'qm-existing' ? 'active' : ''}" id="qm-existing">
+        <div class="flex justify-between items-center mb-md flex-wrap gap-sm">
           <div>
             <span class="text-sm">Total: <strong class="font-mono">${data.summary.totalMarks}/${data.exam.total_marks}</strong> marks</span>
             ${Object.entries(data.summary.typeCounts).map(([type, marks]) =>
@@ -958,20 +960,25 @@ async function loadExamQuestions(examId, isBackground = false) {
           </div>
           <div class="table-container">
             <table class="data-table">
-              <thead><tr><th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllQuestions" onchange="toggleAllQuestions(this)"></th><th>#</th><th>Type</th><th>Content</th><th>Marks</th><th>Source</th><th>Actions</th></tr></thead>
+              <thead><tr><th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllQuestions" onchange="toggleAllQuestions(this)"></th><th>#</th><th>Type</th><th>Content</th><th>Correct / Model Answer</th><th>Marks</th><th>Source</th><th>Actions</th></tr></thead>
               <tbody>
                 ${data.questions.map((q, i) => `
-                  <tr class="animate-slide-up" style="animation-delay: ${i * 0.05}s">
+                  <tr class="animate-slide-up" style="animation-delay: ${i * 0.03}s">
                     <td style="text-align: center;"><input type="checkbox" class="question-checkbox" value="${q.id}" onchange="updateQuestionBulkActionBar()"></td>
                     <td>${i + 1}</td>
                     <td><span class="badge badge-info">${q.type}</span></td>
-                    <td style="max-width:400px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(q.content)}</td>
-                    <td class="font-mono">${q.marks}</td>
+                    <td style="max-width:320px; white-space:normal; line-height: 1.4;">${escapeHtml(q.content)}</td>
+                    <td style="max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-family: ${q.type === 'programming' ? 'monospace' : 'inherit'}; font-size: 0.85rem; color: var(--accent-emerald);">
+                      ${escapeHtml(typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer) : (q.correct_answer || '—'))}
+                    </td>
+                    <td class="font-mono" style="font-weight:600;">${q.marks}</td>
                     <td><span class="badge ${q.source === 'ai_generated' ? 'badge-warning' : 'badge-neutral'}">${q.source === 'ai_generated' ? '<i class="ph ph-robot"></i> AI' : '<i class="ph ph-pencil-simple"></i> Manual'}</span></td>
                     <td>
-                      <button class="btn btn-action btn-sm" onclick="viewQuestion(${q.id}, ${examId})" title="View Details"><i class="ph ph-eye"></i></button>
-                      <button class="btn btn-action btn-sm" onclick="editExistingQuestion(${q.id}, ${examId})" title="Edit Question"><i class="ph ph-pencil-simple"></i></button>
-                      <button class="btn btn-action btn-sm" onclick="deleteQuestion(${q.id}, ${examId})" title="Delete Question"><i class="ph ph-trash"></i></button>
+                      <div class="flex gap-xs">
+                        <button class="btn btn-action btn-sm" onclick="viewQuestion(${q.id}, ${examId})" title="View Details"><i class="ph ph-eye"></i></button>
+                        <button class="btn btn-action btn-sm" onclick="editExistingQuestion(${q.id}, ${examId})" title="Edit Question"><i class="ph ph-pencil-simple"></i></button>
+                        <button class="btn btn-action btn-sm" onclick="deleteQuestion(${q.id}, ${examId})" title="Delete Question"><i class="ph ph-trash"></i></button>
+                      </div>
                     </td>
                   </tr>
                 `).join('')}
@@ -988,7 +995,7 @@ async function loadExamQuestions(examId, isBackground = false) {
       </div>
 
       <!-- TAB: Add Manual -->
-      <div class="tab-content" id="qm-manual">
+      <div class="tab-content ${activeTabName === 'qm-manual' ? 'active' : ''}" id="qm-manual">
         <div class="card">
           <form id="manual-question-form">
             <div class="form-row">
@@ -1039,8 +1046,8 @@ async function loadExamQuestions(examId, isBackground = false) {
             </div>
             <div id="mq-answer-section" class="hidden">
               <div class="form-group">
-                <label class="form-label">Model Answer / Hint</label>
-                <textarea class="form-textarea" id="mq-answer" rows="3" placeholder="Model answer..."></textarea>
+                <label class="form-label">Model Answer / Hint / Solution Code</label>
+                <textarea class="form-textarea" id="mq-answer" rows="4" placeholder="Model answer or reference code..."></textarea>
               </div>
             </div>
             <button type="button" class="btn btn-primary" onclick="submitManualQuestion(${examId})">Add Question</button>
@@ -1114,51 +1121,60 @@ async function loadExamQuestions(examId, isBackground = false) {
 }
 
 function switchQmTab(btn, tabId) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById(tabId).classList.add('active');
+  const container = document.getElementById('qm-content');
+  if (!container) return;
+  container.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  container.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const target = document.getElementById(tabId);
+  if (target) target.classList.add('active');
 }
 
 function updateManualForm() {
-  const type = document.getElementById('mq-type').value;
-  document.getElementById('mq-options-section').classList.toggle('hidden', type !== 'mcq');
-  document.getElementById('mq-answer-section').classList.toggle('hidden', type === 'mcq');
+  const type = document.getElementById('mq-type')?.value;
+  const optSec = document.getElementById('mq-options-section');
+  const ansSec = document.getElementById('mq-answer-section');
+  if (optSec) optSec.classList.toggle('hidden', type !== 'mcq');
+  if (ansSec) ansSec.classList.toggle('hidden', type === 'mcq');
 }
 
 async function submitManualQuestion(examId) {
-  const type    = document.getElementById('mq-type').value;
-  const content = document.getElementById('mq-content').value;
+  const type    = document.getElementById('mq-type')?.value || 'mcq';
+  const content = document.getElementById('mq-content')?.value || '';
   if (!content.trim()) return showToast('Please enter question content', 'warning');
-  if (!confirm('Are you sure you want to add this question to the exam?')) return;
 
   const body = {
     type,
-    marks:      parseInt(document.getElementById('mq-marks').value),
-    content,
-    difficulty: document.getElementById('mq-difficulty').value,
+    marks:      parseFloat(document.getElementById('mq-marks')?.value) || 1,
+    content:    content.trim(),
+    difficulty: document.getElementById('mq-difficulty')?.value || 'medium',
   };
 
   if (type === 'mcq') {
     body.options = [
-      document.getElementById('mq-opt-a').value,
-      document.getElementById('mq-opt-b').value,
-      document.getElementById('mq-opt-c').value,
-      document.getElementById('mq-opt-d').value,
-    ];
-    body.correct_answer = document.getElementById('mq-correct').value;
+      document.getElementById('mq-opt-a')?.value?.trim() || '',
+      document.getElementById('mq-opt-b')?.value?.trim() || '',
+      document.getElementById('mq-opt-c')?.value?.trim() || '',
+      document.getElementById('mq-opt-d')?.value?.trim() || '',
+    ].filter(o => o !== '');
+    if (body.options.length < 2) return showToast('At least 2 options required for MCQ', 'warning');
+    body.correct_answer = document.getElementById('mq-correct')?.value || 'A';
   } else {
-    body.correct_answer = document.getElementById('mq-answer').value;
+    body.correct_answer = document.getElementById('mq-answer')?.value?.trim() || '';
   }
 
   try {
     await api(`/api/admin/exams/${examId}/questions`, { method: 'POST', body });
-    showToast('Question added', 'success');
+    showToast('Question added successfully', 'success');
     loadExamQuestions(examId, true);
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
+
+window.switchQmTab = switchQmTab;
+window.updateManualForm = updateManualForm;
+window.submitManualQuestion = submitManualQuestion;
 
 async function generateAIQuestions(examId) {
   const btn     = document.getElementById('ai-generate-btn');
@@ -1185,7 +1201,7 @@ async function generateAIQuestions(examId) {
       },
     });
 
-    if (data.questions.length === 0) {
+    if (!data.questions || data.questions.length === 0) {
       preview.innerHTML = `<div class="empty-state"><p>No questions generated. Try adjusting the topic.</p></div>`;
       return;
     }
@@ -1193,65 +1209,98 @@ async function generateAIQuestions(examId) {
     window.__tempAiQuestions = data.questions;
 
     preview.innerHTML = `
-      <div class="card-header">
-        <h4>Generated ${data.questions.length} Questions — Review & Edit</h4>
+      <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <h4 style="margin:0;"><i class="ph ph-check-circle" style="color:var(--accent-emerald);"></i> Generated ${data.questions.length} Questions — Full Review & Edit</h4>
+        <span class="text-sm text-muted">Edit question text, options, or answers before saving to the exam</span>
       </div>
-      <div class="ai-generated-questions-list" style="display:flex; flex-direction:column; gap:1.5rem; max-height: 600px; overflow-y: auto; padding-right: 8px;">
+      <div class="ai-generated-questions-list" style="display:flex; flex-direction:column; gap:1.25rem; max-height: 680px; overflow-y: auto; padding-right: 8px; margin-top: 14px;">
         ${data.questions.map((q, i) => {
-          let optionsHtml = '';
-          if (q.options && Array.isArray(q.options)) {
-            const opts = q.options.map((opt) => {
-              const isCorrect = Array.isArray(q.correct_answer) 
-                ? q.correct_answer.includes(opt) 
-                : q.correct_answer === opt;
-              return (isCorrect ? '*' : '') + opt;
-            }).join('\\n');
+          const isMcq = q.type === 'mcq' || (q.options && Array.isArray(q.options) && q.options.length > 0);
+          const isProg = q.type === 'programming';
+
+          let optionsBlock = '';
+          if (isMcq) {
+            const opts = q.options || ['Option A', 'Option B', 'Option C', 'Option D'];
+            const correctVal = typeof q.correct_answer === 'string' ? q.correct_answer.trim() : (opts[0] || 'A');
             
-            optionsHtml = `
-              <div class="mt-sm">
-                <label class="form-label" style="font-size: 0.8rem; color: var(--text-muted);">Options (one per line, prefix correct with *)</label>
-                <textarea class="form-control ai-q-options" data-idx="${i}" rows="${q.options.length + 1}">${escapeHtml(opts)}</textarea>
+            optionsBlock = `
+              <div class="mt-sm" style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+                <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">MCQ Options</label>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+                  ${opts.map((opt, optIdx) => `
+                    <div style="display:flex; align-items:center; gap:6px;">
+                      <span style="font-weight:700; font-size:0.85rem; color:var(--text-muted); width:20px;">${String.fromCharCode(65 + optIdx)}</span>
+                      <input type="text" class="form-input form-input-sm ai-q-opt-item" data-idx="${i}" data-opt-idx="${optIdx}" value="${escapeHtml(opt)}" placeholder="Option ${String.fromCharCode(65 + optIdx)}">
+                    </div>
+                  `).join('')}
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <label class="form-label" style="margin:0; font-size:0.8rem; font-weight:600; color:var(--accent-emerald);">Correct Option:</label>
+                  <select class="form-select form-select-sm ai-q-correct-select" data-idx="${i}" style="max-width:140px; font-weight:700;">
+                    ${opts.map((opt, optIdx) => {
+                      const letter = String.fromCharCode(65 + optIdx);
+                      const isSelected = correctVal.toUpperCase() === letter || correctVal === opt || (optIdx === 0 && !correctVal);
+                      return `<option value="${letter}" ${isSelected ? 'selected' : ''}>${letter} (${escapeHtml(opt.substring(0, 18))})</option>`;
+                    }).join('')}
+                  </select>
+                </div>
               </div>
             `;
-          } else if (q.type === 'true_false') {
-             optionsHtml = `
-               <div class="mt-sm">
-                 <label class="form-label" style="font-size: 0.8rem; color: var(--text-muted);">Correct Answer</label>
-                 <select class="form-control ai-q-correct" data-idx="${i}" style="max-width: 200px;">
-                   <option value="True" ${q.correct_answer === 'True' ? 'selected' : ''}>True</option>
-                   <option value="False" ${q.correct_answer === 'False' ? 'selected' : ''}>False</option>
-                 </select>
-               </div>
-             `;
+          }
+
+          let answerBlock = '';
+          if (!isMcq) {
+            const modelAnsText = typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer, null, 2) : (q.correct_answer || '');
+            answerBlock = `
+              <div class="mt-sm">
+                <label class="form-label" style="font-size: 0.8rem; font-weight:600; color: var(--accent-emerald);">
+                  ${isProg ? 'Model Solution Code (Python / Reference)' : 'Model / Correct Answer Statement'}
+                </label>
+                <textarea class="form-textarea ai-q-answer" data-idx="${i}" rows="${isProg ? 5 : 3}" style="font-family: ${isProg ? 'monospace' : 'inherit'}; font-size: 0.9rem; border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.02);">${escapeHtml(modelAnsText)}</textarea>
+              </div>
+            `;
           }
 
           return `
-            <div class="card p-md ai-question-card" data-idx="${i}" style="border-left: 4px solid var(--accent-primary);">
-              <div class="flex justify-between items-start mb-sm">
+            <div class="card p-md ai-question-card" data-idx="${i}" style="border-left: 4px solid var(--accent-indigo); background: var(--bg-surface); padding: 18px;">
+              <div class="flex justify-between items-start mb-sm flex-wrap gap-sm">
                 <div class="flex items-center gap-sm">
                   <span class="badge badge-info">${q.type}</span>
-                  <label class="flex items-center gap-xs cursor-pointer">
+                  <label class="flex items-center gap-xs cursor-pointer" style="user-select:none;">
                     <input type="checkbox" checked class="ai-q-keep" data-idx="${i}">
-                    <strong style="font-size: 0.9rem;">Keep Question</strong>
+                    <strong style="font-size: 0.9rem; color: var(--text-primary);">Keep Question</strong>
                   </label>
                 </div>
-                <div style="width: 100px;">
-                  <label class="form-label" style="font-size:0.75rem;">Marks</label>
-                  <input type="number" class="form-control form-control-sm ai-q-marks" data-idx="${i}" value="${q.marks || 1}" min="1" step="0.5">
+                <div class="flex items-center gap-sm">
+                  <div style="width: 100px;">
+                    <label class="form-label" style="font-size:0.75rem; margin-bottom:2px;">Marks</label>
+                    <input type="number" class="form-input form-input-sm ai-q-marks" data-idx="${i}" value="${q.marks || 1}" min="0.5" step="0.5" style="font-weight:700;">
+                  </div>
+                  <div style="width: 110px;">
+                    <label class="form-label" style="font-size:0.75rem; margin-bottom:2px;">Difficulty</label>
+                    <select class="form-select form-select-sm ai-q-difficulty" data-idx="${i}">
+                      <option value="easy" ${q.difficulty === 'easy' ? 'selected' : ''}>Easy</option>
+                      <option value="medium" ${!q.difficulty || q.difficulty === 'medium' ? 'selected' : ''}>Medium</option>
+                      <option value="hard" ${q.difficulty === 'hard' ? 'selected' : ''}>Hard</option>
+                    </select>
+                  </div>
                 </div>
               </div>
+
               <div>
-                <label class="form-label" style="font-size: 0.8rem; color: var(--text-muted);">Question Content</label>
-                <textarea class="form-control ai-q-content" data-idx="${i}" rows="3">${escapeHtml(q.content || q.question || '')}</textarea>
+                <label class="form-label" style="font-size: 0.8rem; font-weight:600; color: var(--text-muted);">Question Statement (Editable)</label>
+                <textarea class="form-textarea ai-q-content" data-idx="${i}" rows="3" style="font-size:0.95rem;">${escapeHtml(q.content || q.question || '')}</textarea>
               </div>
-              ${optionsHtml}
+
+              ${optionsBlock}
+              ${answerBlock}
             </div>
           `;
         }).join('')}
       </div>
-      <div class="mt-md flex gap-sm">
+      <div class="mt-md flex gap-sm flex-wrap">
         <button class="btn btn-success" onclick="saveGeneratedQuestions(${examId})">
-          <i class="ph ph-check-circle"></i> Save Selected Questions
+          <i class="ph ph-check-circle"></i> Save Selected Questions to Exam
         </button>
         <button class="btn btn-primary" onclick="generateAIQuestions(${examId})">
           <i class="ph ph-arrows-clockwise"></i> Redraft Questions
@@ -1286,23 +1335,23 @@ async function saveGeneratedQuestions(examId) {
       
       const marksEl = document.querySelector(`.ai-q-marks[data-idx="${idx}"]`);
       if (marksEl) q.marks = parseFloat(marksEl.value) || 1;
-      
-      const optionsArea = document.querySelector(`.ai-q-options[data-idx="${idx}"]`);
-      if (optionsArea) {
-        const lines = optionsArea.value.split('\\n').map(l => l.trim()).filter(l => l);
-        q.options = lines.map(l => l.startsWith('*') ? l.substring(1).trim() : l);
-        
-        if (q.type === 'mcq') {
-          const correct = lines.find(l => l.startsWith('*'));
-          if (correct) q.correct_answer = correct.substring(1).trim();
-        } else if (q.type === 'mcmq') {
-          q.correct_answer = lines.filter(l => l.startsWith('*')).map(l => l.substring(1).trim());
+
+      const diffEl = document.querySelector(`.ai-q-difficulty[data-idx="${idx}"]`);
+      if (diffEl) q.difficulty = diffEl.value;
+
+      // Extract MCQ options if present
+      const optInputs = document.querySelectorAll(`.ai-q-opt-item[data-idx="${idx}"]`);
+      if (optInputs.length > 0) {
+        q.options = Array.from(optInputs).map(inp => inp.value.trim()).filter(v => v);
+        const correctSelect = document.querySelector(`.ai-q-correct-select[data-idx="${idx}"]`);
+        if (correctSelect) {
+          q.correct_answer = correctSelect.value;
         }
-      }
-      
-      const correctSelect = document.querySelector(`.ai-q-correct[data-idx="${idx}"]`);
-      if (correctSelect) {
-        q.correct_answer = correctSelect.value;
+      } else {
+        const answerTextarea = document.querySelector(`.ai-q-answer[data-idx="${idx}"]`);
+        if (answerTextarea) {
+          q.correct_answer = answerTextarea.value.trim();
+        }
       }
       
       selected.push(q);
@@ -1310,14 +1359,15 @@ async function saveGeneratedQuestions(examId) {
   });
 
   if (selected.length === 0) return showToast('No questions selected', 'warning');
-  if (!confirm(`Are you sure you want to save ${selected.length} questions to the exam?`)) return;
+  if (!confirm(`Save ${selected.length} questions to this exam?`)) return;
 
   try {
     await api(`/api/admin/exams/${examId}/questions/save-generated`, {
       method: 'POST',
       body: { questions: selected },
     });
-    showToast(`Saved ${selected.length} questions`, 'success');
+    showToast(`Saved ${selected.length} questions successfully!`, 'success');
+    window.__tempAiQuestions = null;
     loadExamQuestions(examId, true);
   } catch (err) {
     showToast(err.message, 'error');
@@ -1348,15 +1398,15 @@ async function viewQuestion(qId, examId) {
 
     let detailHtml = `
       <div class="mb-md"><span class="badge badge-info">${q.type}</span> <span class="badge badge-neutral">${q.marks} marks</span> <span class="badge ${q.source === 'ai_generated' ? 'badge-warning' : 'badge-neutral'}">${q.source}</span></div>
-      <div class="mb-md"><strong>Question:</strong><br>${escapeHtml(q.content)}</div>
+      <div class="mb-md"><strong>Question:</strong><br><div style="padding:10px; background:var(--bg-body); border-radius:6px; margin-top:4px;">${escapeHtml(q.content)}</div></div>
     `;
-    if (q.options) {
-      detailHtml += `<div class="mb-md"><strong>Options:</strong><br>${q.options.map((o, i) => `${String.fromCharCode(65 + i)}) ${escapeHtml(o)}`).join('<br>')}</div>`;
+    if (q.options && q.options.length > 0) {
+      detailHtml += `<div class="mb-md"><strong>Options:</strong><div style="margin-top:4px;">${q.options.map((o, i) => `<div><strong>${String.fromCharCode(65 + i)})</strong> ${escapeHtml(o)}</div>`).join('')}</div></div>`;
     }
     if (q.correct_answer) {
-      detailHtml += `<div class="mb-md"><strong>Correct Answer:</strong> ${escapeHtml(q.correct_answer)}</div>`;
+      detailHtml += `<div class="mb-md"><strong>Correct / Model Answer:</strong><pre style="padding:10px; background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:6px; font-family:${q.type === 'programming' ? 'monospace' : 'inherit'}; white-space:pre-wrap; margin-top:4px;">${escapeHtml(typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer, null, 2) : q.correct_answer)}</pre></div>`;
     }
-    openModal(`Question #${qId}`, detailHtml);
+    openModal(`Question Details #${qId}`, detailHtml);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1373,6 +1423,9 @@ async function editExistingQuestion(qId, examId) {
       content: q.content, options: q.options ? [...q.options] : [], correct_answer: q.correct_answer || ''
     };
 
+    const isMcq = q.type === 'mcq';
+    const isProg = q.type === 'programming';
+
     openModal(`Edit Question #${qId}`, `
       <form id="edit-question-form-${qId}">
         <div class="form-row">
@@ -1388,34 +1441,37 @@ async function editExistingQuestion(qId, examId) {
           </div>
           <div class="form-group">
             <label class="form-label">Marks</label>
-            <input type="number" class="form-input" id="edit-q-marks" value="${q.marks}" min="1">
+            <input type="number" class="form-input" id="edit-q-marks" value="${q.marks}" min="0.5" step="0.5">
           </div>
           <div class="form-group">
             <label class="form-label">Difficulty</label>
             <select class="form-select" id="edit-q-difficulty">
               <option value="easy" ${q.difficulty === 'easy' ? 'selected' : ''}>Easy</option>
-              <option value="medium" ${q.difficulty === 'medium' ? 'selected' : ''}>Medium</option>
+              <option value="medium" ${!q.difficulty || q.difficulty === 'medium' ? 'selected' : ''}>Medium</option>
               <option value="hard" ${q.difficulty === 'hard' ? 'selected' : ''}>Hard</option>
             </select>
           </div>
         </div>
+
         <div class="form-group">
-          <label class="form-label">Content</label>
+          <label class="form-label">Question Statement</label>
           <textarea class="form-textarea" id="edit-q-content" rows="4">${escapeHtml(q.content)}</textarea>
         </div>
-        <div id="edit-q-mcq-section" style="${q.type === 'mcq' ? 'display:block' : 'display:none'}">
+
+        <!-- MCQ Options Section -->
+        <div id="edit-q-mcq-section" style="${isMcq ? 'display:block' : 'display:none'}; background:rgba(255,255,255,0.02); padding:14px; border-radius:6px; border:1px solid var(--border-color); margin-bottom:16px;">
           <div class="form-group">
             <label class="form-label">Options (MCQ)</label>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
               <input type="text" class="form-input" id="edit-q-opt-0" placeholder="Option A" value="${q.options && q.options[0] ? escapeHtml(q.options[0]) : ''}">
               <input type="text" class="form-input" id="edit-q-opt-1" placeholder="Option B" value="${q.options && q.options[1] ? escapeHtml(q.options[1]) : ''}">
               <input type="text" class="form-input" id="edit-q-opt-2" placeholder="Option C" value="${q.options && q.options[2] ? escapeHtml(q.options[2]) : ''}">
               <input type="text" class="form-input" id="edit-q-opt-3" placeholder="Option D" value="${q.options && q.options[3] ? escapeHtml(q.options[3]) : ''}">
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Correct Answer</label>
-            <select class="form-select" id="edit-q-correct">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" style="color:var(--accent-emerald);">Correct Option</label>
+            <select class="form-select" id="edit-q-correct" style="max-width:140px;">
               <option value="A" ${q.correct_answer === 'A' ? 'selected' : ''}>A</option>
               <option value="B" ${q.correct_answer === 'B' ? 'selected' : ''}>B</option>
               <option value="C" ${q.correct_answer === 'C' ? 'selected' : ''}>C</option>
@@ -1423,13 +1479,17 @@ async function editExistingQuestion(qId, examId) {
             </select>
           </div>
         </div>
-        <div id="edit-q-nonmcq-section" style="${q.type !== 'mcq' ? 'display:block' : 'display:none'}">
+
+        <!-- Non-MCQ Model Answer Section -->
+        <div id="edit-q-nonmcq-section" style="${!isMcq ? 'display:block' : 'display:none'}">
           <div class="form-group">
-            <label class="form-label">Model Answer / Hint</label>
-            <textarea class="form-textarea" id="edit-q-correct-text" rows="3">${escapeHtml(q.correct_answer && q.type !== 'mcq' ? q.correct_answer : '')}</textarea>
+            <label class="form-label" style="color:var(--accent-emerald);">Model / Correct Answer / Reference Code</label>
+            <textarea class="form-textarea" id="edit-q-correct-text" rows="4" style="font-family:${isProg ? 'monospace' : 'inherit'}; border-color:rgba(16,185,129,0.3); background:rgba(16,185,129,0.02);">${escapeHtml(typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer, null, 2) : (q.correct_answer || ''))}</textarea>
           </div>
         </div>
-        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
           <button type="button" class="btn btn-primary" onclick="saveEditedQuestion(${q.id}, ${examId})">Save Changes</button>
         </div>
       </form>
@@ -1442,56 +1502,45 @@ async function editExistingQuestion(qId, examId) {
 function toggleEditOptions(type) {
   document.getElementById('edit-q-mcq-section').style.display    = type === 'mcq' ? 'block' : 'none';
   document.getElementById('edit-q-nonmcq-section').style.display = type !== 'mcq' ? 'block' : 'none';
+  const textarea = document.getElementById('edit-q-correct-text');
+  if (textarea) textarea.style.fontFamily = type === 'programming' ? 'monospace' : 'inherit';
 }
 
 async function saveEditedQuestion(qId, examId) {
   try {
     const type       = document.getElementById('edit-q-type').value;
-    const marks      = parseInt(document.getElementById('edit-q-marks').value, 10);
+    const marks      = parseFloat(document.getElementById('edit-q-marks').value) || 1;
     const difficulty = document.getElementById('edit-q-difficulty').value;
-    const content    = document.getElementById('edit-q-content').value;
+    const content    = document.getElementById('edit-q-content').value.trim();
+
+    if (!content) return showToast('Question statement cannot be empty', 'warning');
 
     let opts = [], correct = '';
     if (type === 'mcq') {
       opts = [
-        document.getElementById('edit-q-opt-0').value,
-        document.getElementById('edit-q-opt-1').value,
-        document.getElementById('edit-q-opt-2').value,
-        document.getElementById('edit-q-opt-3').value,
-      ].filter(o => o.trim() !== '');
-      if (opts.length < 2) throw new Error('At least 2 options required for MCQ');
+        document.getElementById('edit-q-opt-0').value.trim(),
+        document.getElementById('edit-q-opt-1').value.trim(),
+        document.getElementById('edit-q-opt-2').value.trim(),
+        document.getElementById('edit-q-opt-3').value.trim(),
+      ].filter(o => o !== '');
+      if (opts.length < 2) return showToast('At least 2 options required for MCQ', 'warning');
       correct = document.getElementById('edit-q-correct').value;
     } else {
-      correct = document.getElementById('edit-q-correct-text').value;
+      correct = document.getElementById('edit-q-correct-text').value.trim();
     }
 
     const payload = { type, marks, difficulty, content, options: opts, correct_answer: correct };
 
-    if (window.__editingQuestionOriginal) {
-      const orig = window.__editingQuestionOriginal;
-      const isUnchanged =
-        payload.type === orig.type &&
-        payload.marks === orig.marks &&
-        payload.difficulty === orig.difficulty &&
-        payload.content.trim() === orig.content.trim() &&
-        JSON.stringify(payload.options) === JSON.stringify(orig.options) &&
-        payload.correct_answer.trim() === orig.correct_answer.trim();
+    await api(`/api/admin/questions/${qId}`, {
+      method: 'PUT',
+      body: payload,
+    });
 
-      if (isUnchanged) {
-        showToast('No changes detected — question is already saved.', 'info');
-        closeModal();
-        return;
-      }
-    }
-
-    if (!confirm('Are you sure you want to save the changes to this question?')) return;
-
-    await api(`/api/admin/questions/${qId}`, { method: 'PUT', body: payload });
-    showToast('Question updated', 'success');
     closeModal();
+    showToast('Question updated successfully!', 'success');
     loadExamQuestions(examId, true);
   } catch (err) {
-    showToast(err.message, 'error');
+    showToast('Failed to update question: ' + err.message, 'error');
   }
 }
 
@@ -1543,6 +1592,18 @@ async function bulkDeleteQuestions(examId) {
     showToast(err.message, 'error');
   }
 }
+
+window.generateAIQuestions = generateAIQuestions;
+window.saveGeneratedQuestions = saveGeneratedQuestions;
+window.uploadQuestions = uploadQuestions;
+window.viewQuestion = viewQuestion;
+window.editExistingQuestion = editExistingQuestion;
+window.toggleEditOptions = toggleEditOptions;
+window.saveEditedQuestion = saveEditedQuestion;
+window.deleteQuestion = deleteQuestion;
+window.toggleAllQuestions = toggleAllQuestions;
+window.updateQuestionBulkActionBar = updateQuestionBulkActionBar;
+window.bulkDeleteQuestions = bulkDeleteQuestions;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ADMIN: SCORE REPORTS

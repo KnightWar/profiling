@@ -247,18 +247,15 @@ router.post('/students/bulk', upload.single('file'), async (req, res) => {
 router.put('/authorizations', async (req, res) => {
   try {
     const { studentIds, authorized } = req.body;
-    if (!Array.isArray(studentIds)) {
-      return res.status(400).json({ error: 'studentIds must be an array' });
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ error: 'studentIds must be a non-empty array' });
     }
     const db = getDb();
     const placeholders = studentIds.map(() => '?').join(',');
     const val = authorized ? 1 : 0;
     
-    // Using transaction for bulk update
-    db.transaction(() => {
-      db.prepare(`UPDATE users SET login_authorized = ? WHERE id IN (${placeholders}) AND role = 'student'`)
-        .run(val, ...studentIds);
-    })();
+    await db.prepare(`UPDATE users SET login_authorized = ? WHERE id IN (${placeholders}) AND role = 'student'`)
+      .run(val, ...studentIds);
     
     res.json({ message: 'Authorizations updated successfully' });
   } catch (err) {
@@ -313,17 +310,15 @@ router.delete('/students/:id/exams', async (req, res) => {
   if (!student) return res.status(404).json({ error: 'Student not found' });
 
   try {
-    const deleteTx = db.transaction(() => {
-      db.prepare('DELETE FROM composite_scores WHERE student_id = ?').run(req.params.id);
-      db.prepare('DELETE FROM component_totals WHERE student_id = ?').run(req.params.id);
-      db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(req.params.id);
-      db.prepare('DELETE FROM responses WHERE student_id = ?').run(req.params.id);
-      db.prepare('DELETE FROM exam_sessions WHERE student_id = ?').run(req.params.id);
-      db.prepare('DELETE FROM violations WHERE student_id = ?').run(req.params.id);
-      // Reset active session ID just in case
-      db.prepare('UPDATE users SET active_session_id = NULL WHERE id = ?').run(req.params.id);
-    });
-    await deleteTx();
+    await db.prepare('DELETE FROM composite_scores WHERE student_id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM component_totals WHERE student_id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(req.params.id);
+    await db.prepare('DELETE FROM responses WHERE student_id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM exam_sessions WHERE student_id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM violations WHERE student_id = ?').run(req.params.id);
+    // Reset active session ID just in case
+    await db.prepare('UPDATE users SET active_session_id = NULL WHERE id = ?').run(req.params.id);
+
     res.json({ message: 'All exams and scores for this student have been reset.' });
   } catch (err) {
     console.error('Reset exams error:', err);
@@ -678,11 +673,9 @@ router.put('/batches/:id', async (req, res) => {
 router.delete('/batches/:id', async (req, res) => {
   try {
     const db = getDb();
-    db.transaction(async () => {
-      await db.prepare('DELETE FROM student_batches WHERE batch_id = ?').run(req.params.id);
-      await db.prepare('DELETE FROM exam_batches WHERE batch_id = ?').run(req.params.id);
-      await db.prepare('DELETE FROM batches WHERE id = ?').run(req.params.id);
-    })();
+    await db.prepare('DELETE FROM student_batches WHERE batch_id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM exam_batches WHERE batch_id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM batches WHERE id = ?').run(req.params.id);
     res.json({ message: 'Batch deleted' });
   } catch (err) {
     console.error('Delete batch error:', err);
@@ -715,13 +708,11 @@ router.post('/batches/:id/students', async (req, res) => {
     const db = getDb();
     const batchId = req.params.id;
 
-    db.transaction(async () => {
-      await db.prepare('DELETE FROM student_batches WHERE batch_id = ?').run(batchId);
-      const stmt = await db.prepare('INSERT OR IGNORE INTO student_batches (student_id, batch_id) VALUES (?, ?)');
-      for (const sid of student_ids) {
-        stmt.run(sid, batchId);
-      }
-    })();
+    await db.prepare('DELETE FROM student_batches WHERE batch_id = ?').run(batchId);
+    const stmt = db.prepare('INSERT OR IGNORE INTO student_batches (student_id, batch_id) VALUES (?, ?)');
+    for (const sid of student_ids) {
+      await stmt.run(sid, batchId);
+    }
 
     res.json({ message: `Assigned ${student_ids.length} students to batch` });
   } catch (err) {
@@ -754,19 +745,17 @@ router.post('/exams/:id/batches', async (req, res) => {
     const db = getDb();
     const examId = req.params.id;
 
-    db.transaction(() => {
-      // Remove all batches currently assigned to THIS exam
-      db.prepare('DELETE FROM exam_batches WHERE exam_id = ?').run(examId);
+    // Remove all batches currently assigned to THIS exam
+    await db.prepare('DELETE FROM exam_batches WHERE exam_id = ?').run(examId);
 
-      const removeBatchFromOtherExams = db.prepare('DELETE FROM exam_batches WHERE batch_id = ?');
-      const stmt = db.prepare('INSERT OR IGNORE INTO exam_batches (exam_id, batch_id) VALUES (?, ?)');
+    const removeBatchFromOtherExams = db.prepare('DELETE FROM exam_batches WHERE batch_id = ?');
+    const stmt = db.prepare('INSERT OR IGNORE INTO exam_batches (exam_id, batch_id) VALUES (?, ?)');
 
-      for (const bid of batch_ids) {
-        // Enforce one exam per batch: remove this batch from any other exams
-        removeBatchFromOtherExams.run(bid);
-        stmt.run(examId, bid);
-      }
-    })();
+    for (const bid of batch_ids) {
+      // Enforce one exam per batch: remove this batch from any other exams
+      await removeBatchFromOtherExams.run(bid);
+      await stmt.run(examId, bid);
+    }
 
     res.json({ message: `Assigned ${batch_ids.length} batches to exam` });
   } catch (err) {

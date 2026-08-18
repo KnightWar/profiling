@@ -124,26 +124,22 @@ router.post('/exams/:id/questions/upload', upload.single('file'), async (req, re
     `);
 
     let count = 0;
-    const insertMany = db.transaction(async (qs) => {
-      for (const q of qs) {
-        sortOrder++;
-        await insert.run(
-          req.params.id,
-          q.type || 'mcq',
-          q.marks || 1,
-          q.content || q.question,
-          q.options ? JSON.stringify(q.options) : null,
-          q.correct_answer || q.correct || null,
-          q.test_cases ? JSON.stringify(q.test_cases) : null,
-          q.rubric ? JSON.stringify(q.rubric) : null,
-          sortOrder,
-          q.difficulty || 'medium'
-        );
-        count++;
-      }
-    });
-
-    await insertMany(questions);
+    for (const q of questions) {
+      sortOrder++;
+      await insert.run(
+        req.params.id,
+        q.type || 'mcq',
+        q.marks || 1,
+        q.content || q.question,
+        q.options ? JSON.stringify(q.options) : null,
+        q.correct_answer || q.correct || null,
+        q.test_cases ? JSON.stringify(q.test_cases) : null,
+        q.rubric ? JSON.stringify(q.rubric) : null,
+        sortOrder,
+        q.difficulty || 'medium'
+      );
+      count++;
+    }
 
     // Clean up temp file
     const fs = require('fs');
@@ -316,18 +312,12 @@ router.post('/exams/:id/questions/bulk-delete', async (req, res, next) => {
   }
 
   try {
-    const db = getDb();
-    const deleteTx = db.transaction(async (ids) => {
-      const stmt = db.prepare('DELETE FROM questions WHERE id = ? AND exam_id = ?');
-      let count = 0;
-      for (const id of ids) {
-        const res = await stmt.run(id, req.params.id);
-        count += res.changes;
-      }
-      return count;
-    });
-
-    const deletedCount = await deleteTx(question_ids);
+    const stmt = db.prepare('DELETE FROM questions WHERE id = ? AND exam_id = ?');
+    let deletedCount = 0;
+    for (const id of question_ids) {
+      const res = await stmt.run(id, req.params.id);
+      deletedCount += res.changes;
+    }
     res.json({ message: `Successfully deleted ${deletedCount} questions` });
   } catch (err) {
     next(err);

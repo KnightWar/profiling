@@ -224,12 +224,9 @@ router.post('/exams/:id/submit', async (req, res, next) => {
           answer_data = ?, submitted_at = CURRENT_TIMESTAMP
       `);
 
-      const saveAll = db.transaction(async () => {
-        for (const r of finalResponses) {
-          await upsert.run(studentId, examId, r.question_id, r.answer_data || '', r.answer_data || '');
-        }
-      });
-      await saveAll();
+      for (const r of finalResponses) {
+        await upsert.run(studentId, examId, r.question_id, r.answer_data || '', r.answer_data || '');
+      }
     }
 
     // Mark session as submitted
@@ -309,16 +306,21 @@ router.get('/results', async (req, res, next) => {
     for (const e of examsList) {
       let questions = [];
       if (e.session_status) {
-        questions = await db.prepare(`
-          SELECT q.id, q.content, q.type, q.correct_answer, q.marks,
+        const rawQuestions = await db.prepare(`
+          SELECT q.id, q.content, q.type, q.correct_answer, q.options, q.marks, q.sort_order,
                  r.answer_data as student_answer,
-                 s.marks_awarded
+                 s.marks_awarded, s.feedback
           FROM questions q
           LEFT JOIN responses r ON r.question_id = q.id AND r.student_id = ?
           LEFT JOIN scores s ON s.response_id = r.id
           WHERE q.exam_id = ?
-          ORDER BY q.id
+          ORDER BY q.sort_order, q.id
         `).all(studentId, e.id);
+
+        questions = rawQuestions.map(q => ({
+          ...q,
+          options: q.options ? (typeof q.options === 'string' ? JSON.parse(q.options) : q.options) : null,
+        }));
       }
       examBreakdown.push({ ...e, questions });
     }

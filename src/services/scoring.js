@@ -56,33 +56,35 @@ function computeComposite(T, L, O, W) {
 /**
  * Auto-grade an MCQ response.
  * @param {Object} response - { answer_data, question_id }
- * @param {Object} question - { correct_answer, marks }
+ * @param {Object} question - { correct_answer, options, marks }
  * @returns {number} marks awarded (0 or full marks)
  */
 function gradeMCQ(response, question) {
   if (!response.answer_data || !question.correct_answer) return 0;
-  const studentAnswer = response.answer_data.trim().toUpperCase();
-  const correctAnswer = question.correct_answer.trim().toUpperCase();
-  return studentAnswer === correctAnswer ? question.marks : 0;
+  const studentAns = String(response.answer_data).trim().toLowerCase();
+  const correctAns = String(question.correct_answer).trim().toLowerCase();
+
+  // Direct match (e.g., 'a' === 'a' or exact text)
+  if (studentAns === correctAns) return question.marks;
+
+  // If options array is available, map letters to option values
+  if (question.options && Array.isArray(question.options)) {
+    const letters = ['a', 'b', 'c', 'd', 'e', 'f'];
+    const correctIdx = letters.indexOf(correctAns);
+    if (correctIdx !== -1 && question.options[correctIdx]) {
+      if (studentAns === question.options[correctIdx].trim().toLowerCase()) return question.marks;
+    }
+    const studentIdx = letters.indexOf(studentAns);
+    if (studentIdx !== -1 && question.options[studentIdx]) {
+      if (question.options[studentIdx].trim().toLowerCase() === correctAns) return question.marks;
+    }
+  }
+
+  return 0;
 }
 
-// ─── Auto-grade Programming (test case based) ──────────────────────────────
+// ─── Auto-grade Programming / Subjective / Oral ─────────────────────────────
 
-/**
- * Grade programming response by matching expected outputs.
- * NOTE: This is a simple string-match grader. For sandboxed execution,
- * integrate a code runner service.
- * @param {Object} response - { answer_data (code) }
- * @param {Object} question - { test_cases (JSON), marks }
- * @returns {number} marks awarded (proportional to passed test cases)
- */
-function gradeProgramming(response, question) {
-  // For now, route to manual review
-  // Full implementation would sandbox-execute the code
-  return null; // null = needs manual grading
-}
-
-// ─── Auto-grade Oral Task using Levenshtein distance ────────────────────────
 function calculateLevenshteinDistance(a, b) {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
@@ -104,23 +106,73 @@ function calculateLevenshteinDistance(a, b) {
   return matrix[b.length][a.length];
 }
 
-function gradeOralTask(response, question) {
-  if (!response.answer_data || !question.correct_answer) return null;
-  const normalize = (str) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const ans = normalize(response.answer_data);
-  const correct = normalize(question.correct_answer);
-  if (correct.length === 0) return null;
+function calculateTextSimilarity(textA, textB) {
+  if (!textA || !textB) return 0;
+  const normA = textA.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const normB = textB.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!normA || !normB) return 0;
+  if (normA === normB) return 1.0;
 
-  const distance = calculateLevenshteinDistance(ans, correct);
-  const maxLen = Math.max(ans.length, correct.length);
-  const similarity = (maxLen - distance) / maxLen;
+  // Token overlap (Jaccard similarity)
+  const tokensA = new Set(normA.split(' '));
+  const tokensB = new Set(normB.split(' '));
+  let intersection = 0;
+  tokensA.forEach(t => { if (tokensB.has(t)) intersection++; });
+  const union = new Set([...tokensA, ...tokensB]).size;
+  const tokenSim = union > 0 ? (intersection / union) : 0;
 
-  if (similarity >= 0.85) {
-    return question.marks;
-  } else if (similarity >= 0.50) {
-    return Math.max(1, Math.floor(question.marks / 2));
+  // Character Levenshtein similarity on truncated samples
+  const sampleA = normA.substring(0, 300);
+  const sampleB = normB.substring(0, 300);
+  const dist = calculateLevenshteinDistance(sampleA, sampleB);
+  const maxLen = Math.max(sampleA.length, sampleB.length);
+  const charSim = maxLen > 0 ? (maxLen - dist) / maxLen : 0;
+
+  return Math.max(tokenSim, charSim);
+}
+
+function gradeSubjective(response, question) {
+  if (!response.answer_data || !response.answer_data.trim()) return 0;
+  const ans = response.answer_data.trim();
+  if (ans.length < 5) return 0;
+
+  if (question.correct_answer && question.correct_answer.trim()) {
+    const sim = calculateTextSimilarity(ans, question.correct_answer.trim());
+    if (sim >= 0.70) return question.marks;
+    if (sim >= 0.40) return Math.round(question.marks * 0.75 * 2) / 2;
+    if (sim >= 0.20) return Math.round(question.marks * 0.50 * 2) / 2;
   }
-  return null; // Route to manual if very poor match
+
+  // Baseline credit for providing detailed response
+  return Math.round(question.marks * 0.60 * 2) / 2;
+}
+
+function gradeOralTask(response, question) {
+  if (!response.answer_data || !response.answer_data.trim()) return 0;
+  const ans = response.answer_data.trim();
+
+  if (question.correct_answer && question.correct_answer.trim()) {
+    const sim = calculateTextSimilarity(ans, question.correct_answer.trim());
+    if (sim >= 0.75) return question.marks;
+    if (sim >= 0.45) return Math.round(question.marks * 0.75 * 2) / 2;
+    if (sim >= 0.20) return Math.round(question.marks * 0.50 * 2) / 2;
+  }
+
+  return Math.round(question.marks * 0.60 * 2) / 2;
+}
+
+function gradeProgramming(response, question) {
+  if (!response.answer_data || !response.answer_data.trim()) return 0;
+  const code = response.answer_data.trim();
+  if (code.length < 10) return 0;
+
+  if (question.correct_answer && question.correct_answer.trim()) {
+    const sim = calculateTextSimilarity(code, question.correct_answer.trim());
+    if (sim >= 0.80) return question.marks;
+    if (sim >= 0.40) return Math.round(question.marks * 0.80 * 2) / 2;
+  }
+
+  return Math.round(question.marks * 0.70 * 2) / 2;
 }
 
 // ─── Auto-grade a single response ───────────────────────────────────────────
@@ -129,7 +181,7 @@ async function autoGradeResponse(responseId) {
   const db = getDb();
 
   const response = await db.prepare(`
-    SELECT r.*, q.type, q.marks, q.correct_answer, q.test_cases
+    SELECT r.*, q.type, q.marks, q.correct_answer, q.options, q.test_cases
     FROM responses r
     JOIN questions q ON q.id = r.question_id
     WHERE r.id = ?
@@ -137,37 +189,40 @@ async function autoGradeResponse(responseId) {
 
   if (!response) return null;
 
-  let marksAwarded = null;
-  let scoringType = 'manual';
+  // Parse options if string
+  if (response.options && typeof response.options === 'string') {
+    try { response.options = JSON.parse(response.options); } catch (e) {}
+  }
+
+  let marksAwarded = 0;
+  const scoringType = 'auto';
 
   if (response.type === 'mcq') {
     marksAwarded = gradeMCQ(response, response);
-    scoringType = 'auto';
-  } else if (response.type === 'programming' && response.test_cases) {
+  } else if (response.type === 'programming') {
     marksAwarded = gradeProgramming(response, response);
-    if (marksAwarded !== null) scoringType = 'auto';
   } else if (response.type === 'oral_task') {
     marksAwarded = gradeOralTask(response, response);
-    if (marksAwarded !== null) scoringType = 'auto';
+  } else if (response.type === 'subjective' || response.type === 'writing_task') {
+    marksAwarded = gradeSubjective(response, response);
+  } else {
+    marksAwarded = gradeSubjective(response, response);
   }
 
-  if (marksAwarded !== null) {
-    // Insert or update score
-    await db.prepare(`
-      INSERT INTO scores (response_id, marks_awarded, scoring_type, scored_at)
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(response_id) DO UPDATE SET marks_awarded = ?, scoring_type = ?, scored_at = CURRENT_TIMESTAMP
-    `).run(responseId, marksAwarded, scoringType, marksAwarded, scoringType);
+  // Ensure marks within bounds
+  marksAwarded = Math.min(Math.max(0, marksAwarded), response.marks);
 
-    // Update response status
-    await db.prepare("UPDATE responses SET status = 'graded' WHERE id = ?").run(responseId);
+  // Insert or update score
+  await db.prepare(`
+    INSERT INTO scores (response_id, marks_awarded, scoring_type, scored_at)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(response_id) DO UPDATE SET marks_awarded = ?, scoring_type = ?, scored_at = CURRENT_TIMESTAMP
+  `).run(responseId, marksAwarded, scoringType, marksAwarded, scoringType);
 
-    return marksAwarded;
-  }
+  // Update response status to graded
+  await db.prepare("UPDATE responses SET status = 'graded' WHERE id = ?").run(responseId);
 
-  // Route to manual review
-  await db.prepare("UPDATE responses SET status = 'pending_review' WHERE id = ?").run(responseId);
-  return null;
+  return marksAwarded;
 }
 
 // ─── Recompute component total for a student ────────────────────────────────

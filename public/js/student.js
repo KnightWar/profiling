@@ -754,50 +754,112 @@ async function renderStudentResults() {
       `;
 
       completedExams.forEach(e => {
+        const totalAwarded = e.questions ? e.questions.reduce((sum, q) => sum + (q.marks_awarded || 0), 0) : e.marks_obtained;
+
         html += `
-            <div style="border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: var(--sp-md); overflow:hidden;">
-              <div style="background:var(--bg-secondary); padding:var(--sp-md); display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="toggleAccordion('exam-details-${e.id}')">
-                <div>
-                  <h4 style="margin:0;">${e.title} <span class="badge badge-info ml-sm">${e.component_name}</span></h4>
-                  ${e.remarks ? `<span class="badge badge-warning mt-sm">Note: ${escapeHtml(e.remarks)}</span>` : ''}
+            <div style="border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: var(--sp-md); overflow:hidden; background: var(--bg-surface);">
+              <div style="background:var(--bg-surface); padding:16px 20px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; user-select:none;" onclick="toggleAccordion('exam-details-${e.id}')">
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div style="width:36px; height:36px; border-radius:8px; background:var(--gradient-primary); display:flex; align-items:center; justify-content:center; color:#fff;">
+                    <i class="ph ph-file-text" style="font-size:1.2rem;"></i>
+                  </div>
+                  <div>
+                    <h4 style="margin:0; font-size:1.05rem; color:var(--text-primary);">${escapeHtml(e.title)} <span class="badge badge-info ml-sm">${escapeHtml(e.component_name)}</span></h4>
+                    <span class="text-sm text-muted">${e.questions ? e.questions.length : 0} Questions • Submitted ${e.submitted_at ? new Date(e.submitted_at).toLocaleDateString() : ''}</span>
+                    ${e.remarks ? `<div class="text-sm text-muted mt-xs">Note: ${escapeHtml(e.remarks)}</div>` : ''}
+                  </div>
                 </div>
-                <div class="font-mono" style="font-weight:600; font-size:1.1rem; color:var(--accent-emerald);">
-                  ${e.marks_obtained} / ${e.total_marks}
+                <div style="display:flex; align-items:center; gap:16px;">
+                  <div class="font-mono" style="font-weight:700; font-size:1.2rem; color:var(--accent-emerald);">
+                    ${totalAwarded} / ${e.total_marks}
+                  </div>
+                  <i class="ph ph-caret-down" id="icon-exam-details-${e.id}" style="transition: transform 0.2s;"></i>
                 </div>
               </div>
-              <div id="exam-details-${e.id}" style="display:none; padding:var(--sp-md); background:var(--bg-primary);">
-                <div class="table-container" style="border:none;">
-                  <table class="data-table" style="width:100%;">
-                    <thead>
-                      <tr>
-                        <th>Q#</th><th>Question</th><th>Your Answer</th><th>Result</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+
+              <div id="exam-details-${e.id}" style="display:none; padding:16px 20px; background:var(--bg-body); border-top:1px solid var(--border-color);">
+                <div style="display:flex; flex-direction:column; gap:16px;">
         `;
 
         if (e.questions && e.questions.length > 0) {
           e.questions.forEach((q, idx) => {
-            const isCorrect = q.marks_awarded > 0;
+            const marksAwarded = q.marks_awarded !== null && q.marks_awarded !== undefined ? q.marks_awarded : 0;
+            const isFull = marksAwarded >= q.marks;
+            const isPartial = marksAwarded > 0 && marksAwarded < q.marks;
+            const isZero = marksAwarded === 0;
+
+            let resultBadge = '';
+            if (isFull) {
+              resultBadge = `<span class="badge badge-success"><i class="ph ph-check"></i> Correct (${marksAwarded}/${q.marks})</span>`;
+            } else if (isPartial) {
+              resultBadge = `<span class="badge badge-warning"><i class="ph ph-star-half"></i> Partial (${marksAwarded}/${q.marks})</span>`;
+            } else {
+              resultBadge = `<span class="badge badge-danger"><i class="ph ph-x"></i> Incorrect (${marksAwarded}/${q.marks})</span>`;
+            }
+
             html += `
-                      <tr>
-                        <td style="vertical-align:top;">${idx + 1}</td>
-                        <td style="max-width:300px; white-space:normal; vertical-align:top;">${escapeHtml(q.content)}</td>
-                        <td style="max-width:200px; white-space:normal; vertical-align:top;">
-                          <div style="font-family:monospace; margin-bottom:var(--sp-xs);">${escapeHtml(q.student_answer || 'No answer')}</div>
-                          ${!isCorrect && q.correct_answer ? `<div class="text-sm text-muted"><strong>Correct:</strong> <span style="color:var(--accent-emerald);">${escapeHtml(q.correct_answer)}</span></div>` : ''}
-                        </td>
-                        <td style="vertical-align:top;"><span class="badge ${isCorrect ? 'badge-success' : 'badge-danger'}">${isCorrect ? 'Correct' : 'Incorrect'}</span><br><span class="text-sm text-muted">${q.marks_awarded || 0}/${q.marks}</span></td>
-                      </tr>
+                  <div class="card" style="padding:16px; background:var(--bg-surface); border:1px solid var(--border-color); border-radius:var(--radius-sm);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-weight:700; color:var(--text-muted);">Q${idx + 1}</span>
+                        <span class="badge badge-info">${escapeHtml(q.type)}</span>
+                        <span class="badge badge-neutral">${q.marks} mark${q.marks > 1 ? 's' : ''} max</span>
+                      </div>
+                      <div>${resultBadge}</div>
+                    </div>
+
+                    <!-- Question Statement -->
+                    <div style="margin-bottom:12px;">
+                      <div class="text-sm text-muted" style="font-size:0.75rem; font-weight:700; text-transform:uppercase; margin-bottom:4px;">Question</div>
+                      <div style="color:var(--text-primary); font-size:0.95rem; line-height:1.5;">${escapeHtml(q.content)}</div>
+                    </div>
+
+                    <!-- Options if MCQ -->
+                    ${q.options && Array.isArray(q.options) && q.options.length > 0 ? `
+                      <div style="margin-bottom:12px; display:grid; grid-template-columns:1fr 1fr; gap:6px; background:rgba(255,255,255,0.02); padding:10px; border-radius:6px;">
+                        ${q.options.map((opt, optIdx) => `
+                          <div style="font-size:0.85rem; color:var(--text-secondary);">
+                            <strong style="color:var(--text-muted);">${String.fromCharCode(65 + optIdx)})</strong> ${escapeHtml(opt)}
+                          </div>
+                        `).join('')}
+                      </div>
+                    ` : ''}
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;" class="q-ans-grid">
+                      <!-- Student Provided Answer -->
+                      <div style="padding:10px 12px; border-radius:6px; border:1px solid ${isZero ? 'rgba(244,63,94,0.3)' : 'rgba(16,185,129,0.3)'}; background:${isZero ? 'rgba(244,63,94,0.04)' : 'rgba(16,185,129,0.04)'};">
+                        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:${isZero ? 'var(--accent-rose)' : 'var(--accent-emerald)'}; margin-bottom:4px;">
+                          Your Provided Answer
+                        </div>
+                        <div style="font-family:${q.type === 'programming' ? 'monospace' : 'inherit'}; font-size:0.9rem; white-space:pre-wrap; color:var(--text-primary); line-height:1.4;">
+                          ${escapeHtml(q.student_answer || 'No answer submitted')}
+                        </div>
+                      </div>
+
+                      <!-- Official Correct Answer -->
+                      <div style="padding:10px 12px; border-radius:6px; border:1px solid rgba(16,185,129,0.3); background:rgba(16,185,129,0.06);">
+                        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:var(--accent-emerald); margin-bottom:4px;">
+                          Correct / Model Answer
+                        </div>
+                        <div style="font-family:${q.type === 'programming' ? 'monospace' : 'inherit'}; font-size:0.9rem; white-space:pre-wrap; color:var(--text-primary); line-height:1.4;">
+                          ${escapeHtml(typeof q.correct_answer === 'object' ? JSON.stringify(q.correct_answer) : (q.correct_answer || 'Reference criteria applied'))}
+                        </div>
+                      </div>
+                    </div>
+
+                    ${q.feedback ? `
+                      <div class="mt-sm" style="font-size:0.85rem; color:var(--text-secondary); background:rgba(99,102,241,0.05); padding:8px 12px; border-radius:6px; border-left:3px solid var(--accent-indigo);">
+                        <strong>Evaluator Feedback:</strong> ${escapeHtml(q.feedback)}
+                      </div>
+                    ` : ''}
+                  </div>
             `;
           });
         } else {
-          html += `<tr><td colspan="4" class="text-center text-muted">No question details available.</td></tr>`;
+          html += `<div class="empty-state" style="padding:24px;"><p class="text-muted">No question details available.</p></div>`;
         }
 
         html += `
-                    </tbody>
-                  </table>
                 </div>
               </div>
             </div>

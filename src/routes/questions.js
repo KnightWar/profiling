@@ -18,6 +18,64 @@ const upload = multer({ dest: os.tmpdir() });
 // All routes require admin
 router.use(requireRole('admin'));
 
+function normalizeQuestionForStorage(q, defaultSource = 'manual') {
+  let rawType = String(q?.type || 'mcq').toLowerCase().trim();
+  let type = 'subjective';
+  if (rawType.includes('mcq') || rawType.includes('choice')) type = 'mcq';
+  else if (rawType.includes('prog') || rawType.includes('code')) type = 'programming';
+  else if (rawType.includes('oral') || rawType.includes('speak')) type = 'oral_task';
+  else if (rawType.includes('writ') || rawType.includes('essay')) type = 'writing_task';
+  else if (rawType.includes('subj') || rawType.includes('short')) type = 'subjective';
+
+  let marks = Math.max(1, Math.round(parseFloat(q?.marks) || 1));
+
+  let content = String(q?.content || q?.question || 'Question content').trim();
+  if (!content) content = 'Question statement';
+
+  let difficulty = String(q?.difficulty || 'medium').toLowerCase().trim();
+  if (!['easy', 'medium', 'hard'].includes(difficulty)) difficulty = 'medium';
+
+  let source = String(q?.source || defaultSource).toLowerCase().trim();
+  if (!['manual', 'ai_generated'].includes(source)) source = defaultSource;
+
+  let options = null;
+  if (type === 'mcq') {
+    if (Array.isArray(q?.options)) {
+      options = JSON.stringify(q.options.map(o => String(o).trim()).filter(Boolean));
+    } else if (typeof q?.options === 'string' && q.options.trim()) {
+      try {
+        const parsed = JSON.parse(q.options);
+        options = Array.isArray(parsed) ? JSON.stringify(parsed) : JSON.stringify([q.options]);
+      } catch (e) {
+        options = JSON.stringify(q.options.split(',').map(s => s.trim()).filter(Boolean));
+      }
+    }
+  }
+
+  let correctAnswer = '';
+  if (q?.correct_answer !== null && q?.correct_answer !== undefined) {
+    if (typeof q.correct_answer === 'object') {
+      correctAnswer = JSON.stringify(q.correct_answer);
+    } else {
+      correctAnswer = String(q.correct_answer).trim();
+    }
+  } else if (q?.correct) {
+    correctAnswer = String(q.correct).trim();
+  }
+
+  let testCases = null;
+  if (q?.test_cases) {
+    testCases = typeof q.test_cases === 'string' ? q.test_cases : JSON.stringify(q.test_cases);
+  }
+
+  let rubric = null;
+  if (q?.rubric) {
+    rubric = typeof q.rubric === 'string' ? q.rubric : JSON.stringify(q.rubric);
+  }
+
+  return { type, marks, content, options, correct_answer: correctAnswer, test_cases: testCases, rubric, difficulty, source };
+}
+
 // ─── GET /api/admin/exams/:id/questions ─────────────────────────────────────
 router.get('/exams/:id/questions', async (req, res, next) => {
   try {

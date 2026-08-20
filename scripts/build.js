@@ -104,7 +104,7 @@ async function runBuild() {
     const formattedUrls = precacheUrls.map(u => `  '${u}',`).join('\n');
     swContent = swContent
       .replace('{{CACHE_VERSION}}', cacheVersion)
-      .replace('{{PRECACHE_URLS}}', formattedUrls);
+      .replace(/\/\*\s*\{\{PRECACHE_URLS\}\}\s*\*\/|\{\{PRECACHE_URLS\}\}/g, formattedUrls);
     fs.writeFileSync(swDestPath, swContent);
   }
 

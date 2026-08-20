@@ -10,7 +10,7 @@ const PRECACHE_ASSETS = [
   '/index.html',
   '/css/styles.css',
   '/dist/manifest.json',
-  {{PRECACHE_URLS}}
+  /* {{PRECACHE_URLS}} */
 ];
 
 // ─── INSTALL: Precache App Shell ─────────────────────────────────────────────

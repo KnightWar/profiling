@@ -73,8 +73,9 @@ function deriveNamespace(url) {
 // API HELPER
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function api(url, options = {}) {
+async function api(url, options = {}, retries = 1) {
   const method = (options.method || 'GET').toUpperCase();
+  const timeoutMs = options.timeout || 15000;
   const defaults = {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -88,23 +89,47 @@ async function api(url, options = {}) {
     delete defaults.headers['Content-Type'];
   }
 
-  const res = await fetch(url, { ...defaults, ...options });
-  const data = await res.json().catch(() => ({}));
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!res.ok) {
-    if (res.status === 401 && (data.error === 'UNAUTHORIZED_STUDENT' || data.error === 'EXAM_UNAVAILABLE')) {
-      handleLogout(data.error);
+  try {
+    const res = await fetch(url, {
+      ...defaults,
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      if (res.status === 401 && (data.error === 'UNAUTHORIZED_STUDENT' || data.error === 'EXAM_UNAVAILABLE')) {
+        handleLogout(data.error);
+      }
+      const err = new Error(data.error || data.message || `Request failed (${res.status})`);
+      err.code = data.error;
+      err.status = res.status;
+      throw err;
     }
-    const err = new Error(data.error || `Request failed (${res.status})`);
-    err.code = data.error;
+
+    if (method !== 'GET') {
+      invalidateCache(deriveNamespace(url));
+    }
+
+    return data;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      const timeoutErr = new Error('Request timed out. Please check your network connection.');
+      timeoutErr.code = 'TIMEOUT';
+      throw timeoutErr;
+    }
+    // Retry idempotent GET requests once on network failure
+    if (method === 'GET' && retries > 0 && !err.status) {
+      return api(url, options, retries - 1);
+    }
     throw err;
   }
-
-  if (method !== 'GET') {
-    invalidateCache(deriveNamespace(url));
-  }
-
-  return data;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -172,25 +197,44 @@ function isGoogleChrome() {
 // ROLE MODULE LOADER (2.1)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/**
- * Dynamically injects the role-specific <script> tag(s) and waits for load.
- * admin → /dist/admin.js + /dist/evaluator.js
- * student → /dist/student.js
- * evaluator → /dist/evaluator.js
- */
-function loadRoleModule(role) {
-  if (App._roleModuleLoaded) return Promise.resolve();
+let _distManifest = null;
 
-  const cb = '?v=' + Date.now();
+async function getDistManifest() {
+  if (_distManifest) return _distManifest;
+  try {
+    const res = await fetch('/dist/manifest.json', { cache: 'no-cache' });
+    if (res.ok) {
+      _distManifest = await res.json();
+    } else {
+      _distManifest = {};
+    }
+  } catch {
+    _distManifest = {};
+  }
+  return _distManifest;
+}
+
+/**
+ * Dynamically injects the role-specific <script> tag(s) using hashed manifest paths.
+ * admin → admin.<hash>.js + evaluator.<hash>.js
+ * student → student.<hash>.js
+ * evaluator → evaluator.<hash>.js
+ */
+async function loadRoleModule(role) {
+  if (App._roleModuleLoaded) return;
+
+  const manifest = await getDistManifest();
+  const getScriptUrl = (file) => manifest[file] || `/dist/${file}`;
+
   const map = {
-    admin:     ['/dist/admin.js' + cb, '/dist/evaluator.js' + cb],
-    student:   ['/dist/student.js' + cb],
-    evaluator: ['/dist/evaluator.js' + cb],
+    admin:     [getScriptUrl('admin.js'), getScriptUrl('evaluator.js')],
+    student:   [getScriptUrl('student.js')],
+    evaluator: [getScriptUrl('evaluator.js')],
   };
 
   const scripts = map[role] || [];
 
-  return Promise.all(scripts.map(src => new Promise((resolve, reject) => {
+  await Promise.all(scripts.map(src => new Promise((resolve, reject) => {
     // Avoid double-loading if already on page
     if (document.querySelector(`script[src="${src}"]`)) {
       resolve();
@@ -201,9 +245,9 @@ function loadRoleModule(role) {
     s.onload = resolve;
     s.onerror = () => reject(new Error(`Failed to load role module: ${src}`));
     document.head.appendChild(s);
-  }))).then(() => {
-    App._roleModuleLoaded = true;
-  });
+  })));
+
+  App._roleModuleLoaded = true;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -690,10 +734,32 @@ window.renderRichContent = renderRichContent;
 window.setupCodeTextarea = setupCodeTextarea;
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// INIT
+// INIT & CONNECTIVITY
 // ═══════════════════════════════════════════════════════════════════════════════
 
+function updateOnlineStatus() {
+  const banner = document.getElementById('offline-banner');
+  if (!banner) return;
+  if (navigator.onLine) {
+    banner.classList.add('hidden');
+  } else {
+    banner.classList.remove('hidden');
+  }
+}
+
+window.addEventListener('online', () => {
+  updateOnlineStatus();
+  showToast('Back online', 'success');
+});
+
+window.addEventListener('offline', () => {
+  updateOnlineStatus();
+  showToast("You're offline. Changes can't be saved until connection returns.", 'warning');
+});
+
 document.addEventListener('DOMContentLoaded', () => {
+  updateOnlineStatus();
+
   // Forms
   const accessCodeForm = document.getElementById('access-code-form');
   if (accessCodeForm) accessCodeForm.addEventListener('submit', handleAccessCodeLogin);

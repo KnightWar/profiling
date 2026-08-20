@@ -19,7 +19,7 @@ function getPgPool() {
   if (!_pgPool) {
     _pgPool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      max: 10,
+      max: parseInt(process.env.PG_POOL_MAX || '3', 10), // smaller serverless-safe pool on serverless
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
       ssl: {

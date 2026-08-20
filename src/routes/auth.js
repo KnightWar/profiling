@@ -4,13 +4,22 @@
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const { getDb } = require('../db/database');
 const { isChromeUserAgent } = require('../utils/browser-check');
 
 const router = express.Router();
 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // Limit each IP to 30 login requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
+});
+
 // ─── POST /api/auth/login ───────────────────────────────────────────────────
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -60,7 +69,7 @@ router.post('/login', async (req, res) => {
 });
 
 // ─── POST /api/auth/access-code-login ──────────────────────────────────────
-router.post('/access-code-login', async (req, res) => {
+router.post('/access-code-login', authLimiter, async (req, res) => {
   try {
     if (!isChromeUserAgent(req.headers['user-agent'])) {
       return res.status(403).json({ error: 'Google Chrome is strictly required for student logins and exams.' });

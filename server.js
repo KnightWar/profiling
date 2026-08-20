@@ -10,9 +10,20 @@ const { isPg, getDb, initDb, closeDb } = require('./src/db/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+
+// ─── Guard against an insecure default session secret in production ────────
+// A missing SESSION_SECRET in prod means every deploy shares the same
+// publicly-known fallback string, which lets anyone forge session cookies.
+// Fail loudly at boot instead of silently running insecurely.
+if (isProd && !process.env.SESSION_SECRET) {
+  console.error('[FATAL] SESSION_SECRET is not set. Refusing to start in production ' +
+    'with the insecure default secret. Set SESSION_SECRET in your environment variables.');
+  process.exit(1);
+}
 
 // Trust proxy for secure cookies on Vercel/production
-if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+if (isProd) {
   app.set('trust proxy', 1);
 }
 
@@ -37,6 +48,7 @@ if (isPg) {
   sessionStore = new PgStore({
     pool: new Pool({
       connectionString: process.env.DATABASE_URL,
+      max: parseInt(process.env.PG_POOL_MAX || '3', 10), // keep per-instance pool small on serverless
       ssl: { rejectUnauthorized: false }
     }),
     tableName: 'session',
@@ -64,14 +76,27 @@ app.use(session({
   },
 }));
 
-// Static files — 1.2: 7-day cache for immutable public assets; etag for revalidation
-app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: '7d',
+// ─── Static files ────────────────────────────────────────────────────────────
+// Static files in /dist (immutable hashed bundles)
+app.use('/dist', express.static(path.join(__dirname, 'public', 'dist'), {
+  maxAge: '1y',
+  immutable: true,
   etag: true,
-  lastModified: true,
 }));
 
-// Upload files served statically — keep short-lived (1 min) so re-uploads are seen quickly
+// Everything else (fonts, icons, templates, and — importantly — index.html)
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: 0,
+  etag: true,
+  lastModified: true,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.html') || filePath.endsWith('manifest.json') || filePath.endsWith('sw.js')) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
+  },
+}));
+
+// Upload files served statically
 app.use('/uploads', express.static(path.resolve(process.env.UPLOAD_DIR || './uploads'), {
   maxAge: '1m',
   etag: true,
@@ -101,8 +126,6 @@ app.use(async (req, res, next) => {
 });
 
 // ─── Single Session Enforcement ──────────────────────────────────────────────
-// 1.4 — Only run the DB round-trip on mutating requests (POST/PUT/PATCH/DELETE).
-// Safe read-only GETs skip the check entirely, slashing per-request DB load.
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 app.use('/api', async (req, res, next) => {
@@ -150,6 +173,7 @@ app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'Not found' });
   }
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 

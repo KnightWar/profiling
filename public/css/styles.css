@@ -1,11 +1,51 @@
 /* ══════════════════════════════════════════════════════════════════════════════
    Composite Assessment System — Design System v2
-   Professional dark theme · Auto-contrast · Rich animations · Inter font
+   Professional dark theme · Auto-contrast · Rich animations · System fonts
    ══════════════════════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=JetBrains+Mono:wght@400;600&display=swap');
-
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* Consistent, predictable layout across browsers/OSes */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scrollbar-gutter: stable;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Respect user's OS-level reduce-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── Offline banner ───────────────────────────────────────────────────────── */
+.offline-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+  text-align: center;
+}
+.offline-banner.hidden { display: none; }
 
 /* ─── Design Tokens ─────────────────────────────────────────────────────────── */
 :root {

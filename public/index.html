@@ -8,13 +8,17 @@
     content="Composite Assessment System — Score students across Technical, Aptitude, Oral & Written English with weighted composite scoring">
   <meta name="theme-color" content="#09090b">
   <title>Assessment Platform</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="/css/styles.css">
   <!-- Phosphor Icons and Chart.js are loaded deferred at bottom of <body> -->
 </head>
 
 <body>
+  <!-- Offline banner -->
+  <div id="offline-banner" class="offline-banner hidden" role="status" aria-live="polite">
+    <i class="ph ph-wifi-slash"></i>
+    <span>You're offline. Changes can't be saved until your connection returns.</span>
+  </div>
+
   <div id="app">
     <!-- Landing / Login Page -->
     <div id="login-page" class="login-page">
@@ -67,8 +71,6 @@
               <i class="ph ph-rocket-launch"></i> Enter Exam Session
             </button>
           </form>
-
-
         </div>
 
         <!-- Admin Login View (Hidden by default) -->
@@ -100,11 +102,6 @@
               <i class="ph ph-arrow-left"></i> Return to Student Portal
             </button>
           </form>
-
-          <!-- <div class="demo-footer-info">
-            <p>Demo Admin: <strong>admin@cas.local</strong> | Password: <strong>admin123</strong></p>
-          </div> -->
-
         </div>
       </div>
     </div>
@@ -152,19 +149,16 @@
   <div class="toast-container" id="toast-container"></div>
 
   <!-- Scripts -->
-  <!-- Pinned to specific versions + defer so they never block initial paint -->
   <script src="https://unpkg.com/@phosphor-icons/web@2.1.1" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
-  <!--
-    core.js: auth, router, toast, api helper, modal — loaded for all roles.
-    After login, core.js dynamically injects the role-specific script:
-      admin    → /dist/admin.js + /dist/evaluator.js
-      student  → /dist/student.js
-      evaluator → /dist/evaluator.js
-    Run `npm run build` to generate minified files in public/dist/.
-    In development, load unminified sources directly:
-  -->
-  <script src="/dist/core.js" defer></script>
+  <script src="/dist/core.3108ada6.js" defer></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
+  </script>
 </body>
 
 </html>

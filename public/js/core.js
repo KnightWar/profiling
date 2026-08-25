@@ -60,7 +60,7 @@ function invalidateCache(namespace = '*') {
  */
 function deriveNamespace(url) {
   // Order matters: more specific patterns first
-  if (/\/exams\/\d+\/questions/.test(url)) return CACHE_NS.questions;
+  if (url.includes('/questions'))          return CACHE_NS.questions;
   if (url.includes('/batches'))            return CACHE_NS.batches;
   if (url.includes('/students'))           return CACHE_NS.students;
   if (url.includes('/exams'))              return CACHE_NS.exams;

@@ -1560,9 +1560,9 @@ async function saveEditedQuestion(qId, examId) {
 async function deleteQuestion(qId, examId) {
   if (!confirm('Delete this question?')) return;
   try {
-    await api(`/api/admin/questions/${qId}`, { method: 'DELETE' });
-    showToast('Question deleted', 'success');
-    loadExamQuestions(examId, true);
+    const res = await api(`/api/admin/questions/${qId}`, { method: 'DELETE' });
+    showToast(res.message || 'Question deleted', 'success');
+    loadExamQuestions(examId);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1586,20 +1586,25 @@ function updateQuestionBulkActionBar() {
 }
 
 function getSelectedQuestionIds() {
-  return Array.from(document.querySelectorAll('.question-checkbox:checked')).map(cb => parseInt(cb.value));
+  return Array.from(document.querySelectorAll('.question-checkbox:checked'))
+    .map(cb => parseInt(cb.value, 10))
+    .filter(id => !isNaN(id));
 }
 
 async function bulkDeleteQuestions(examId) {
   const qIds = getSelectedQuestionIds();
-  if (qIds.length === 0) return;
-  if (!confirm(`Are you sure you want to delete ${qIds.length} questions?`)) return;
+  if (qIds.length === 0) {
+    showToast('No questions selected', 'warning');
+    return;
+  }
+  if (!confirm(`Are you sure you want to delete ${qIds.length} question(s)?`)) return;
 
   try {
-    await api(`/api/admin/exams/${examId}/questions/bulk-delete`, {
+    const res = await api(`/api/admin/exams/${examId}/questions/bulk-delete`, {
       method: 'POST',
-      body: JSON.stringify({ question_ids: qIds })
+      body: { question_ids: qIds }
     });
-    showToast(`Deleted ${qIds.length} questions`, 'success');
+    showToast(res.message || `Deleted ${qIds.length} questions`, 'success');
     loadExamQuestions(examId);
   } catch (err) {
     showToast(err.message, 'error');

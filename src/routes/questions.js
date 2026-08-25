@@ -283,7 +283,10 @@ router.post('/exams/:id/questions/save-generated', async (req, res, next) => {
     try {
       // Optionally clear existing questions
       if (clearExisting) {
-        await db.prepare('DELETE FROM questions WHERE exam_id = ?').run(req.params.id);
+        const examId = parseInt(req.params.id, 10);
+        await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE exam_id = ?)').run(examId);
+        await db.prepare('DELETE FROM responses WHERE exam_id = ?').run(examId);
+        await db.prepare('DELETE FROM questions WHERE exam_id = ?').run(examId);
       }
 
       const maxSort = await db.prepare('SELECT MAX(sort_order) as m FROM questions WHERE exam_id = ?').get(req.params.id);
@@ -358,10 +361,13 @@ router.put('/questions/:id', async (req, res, next) => {
 });
 
 // ─── DELETE /api/admin/questions/:id ────────────────────────────────────────
-router.delete('/questions/:id', async (req, res, next) => {
+router.delete('/questions/:id', async (req, res) => {
   try {
     const db = getDb();
-    const qId = req.params.id;
+    const qId = parseInt(req.params.id, 10);
+    if (isNaN(qId)) {
+      return res.status(400).json({ error: 'Invalid question ID' });
+    }
 
     // Clean up responses and scores associated with this question
     await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE question_id = ?)').run(qId);
@@ -373,12 +379,13 @@ router.delete('/questions/:id', async (req, res, next) => {
     }
     res.json({ message: 'Question deleted' });
   } catch (err) {
-    next(err);
+    console.error('Delete question error:', err);
+    res.status(500).json({ error: `Failed to delete question: ${err.message}` });
   }
 });
 
 // ─── POST /api/admin/exams/:id/questions/bulk-delete ────────────────────────
-router.post('/exams/:id/questions/bulk-delete', async (req, res, next) => {
+router.post('/exams/:id/questions/bulk-delete', async (req, res) => {
   const { question_ids } = req.body;
   if (!Array.isArray(question_ids) || question_ids.length === 0) {
     return res.status(400).json({ error: 'No questions selected' });
@@ -386,10 +393,15 @@ router.post('/exams/:id/questions/bulk-delete', async (req, res, next) => {
 
   try {
     const db = getDb();
-    const examId = req.params.id;
+    const examId = parseInt(req.params.id, 10);
+    if (isNaN(examId)) {
+      return res.status(400).json({ error: 'Invalid exam ID' });
+    }
     let deletedCount = 0;
 
-    for (const qId of question_ids) {
+    for (const rawId of question_ids) {
+      const qId = parseInt(rawId, 10);
+      if (isNaN(qId)) continue;
       await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE question_id = ?)').run(qId);
       await db.prepare('DELETE FROM responses WHERE question_id = ?').run(qId);
       const result = await db.prepare('DELETE FROM questions WHERE id = ? AND exam_id = ?').run(qId, examId);
@@ -400,7 +412,8 @@ router.post('/exams/:id/questions/bulk-delete', async (req, res, next) => {
 
     res.json({ message: `Successfully deleted ${deletedCount} questions` });
   } catch (err) {
-    next(err);
+    console.error('Bulk delete questions error:', err);
+    res.status(500).json({ error: `Failed to delete questions: ${err.message}` });
   }
 });
 

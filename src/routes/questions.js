@@ -370,8 +370,11 @@ router.delete('/questions/:id', async (req, res) => {
     }
 
     // Clean up responses and scores associated with this question
-    await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE question_id = ?)').run(qId);
-    await db.prepare('DELETE FROM responses WHERE question_id = ?').run(qId);
+    const responses = await db.prepare('SELECT id FROM responses WHERE question_id = ?').all(qId);
+    for (const row of responses) {
+      await db.prepare('DELETE FROM scores WHERE response_id = ?').run(row.id);
+      await db.prepare('DELETE FROM responses WHERE id = ?').run(row.id);
+    }
 
     const result = await db.prepare('DELETE FROM questions WHERE id = ?').run(qId);
     if (!result || result.changes === 0) {
@@ -402,8 +405,13 @@ router.post('/exams/:id/questions/bulk-delete', async (req, res) => {
     for (const rawId of question_ids) {
       const qId = parseInt(rawId, 10);
       if (isNaN(qId)) continue;
-      await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE question_id = ?)').run(qId);
-      await db.prepare('DELETE FROM responses WHERE question_id = ?').run(qId);
+      
+      const responses = await db.prepare('SELECT id FROM responses WHERE question_id = ?').all(qId);
+      for (const row of responses) {
+        await db.prepare('DELETE FROM scores WHERE response_id = ?').run(row.id);
+        await db.prepare('DELETE FROM responses WHERE id = ?').run(row.id);
+      }
+      
       const result = await db.prepare('DELETE FROM questions WHERE id = ? AND exam_id = ?').run(qId, examId);
       if (result && result.changes) {
         deletedCount += result.changes;

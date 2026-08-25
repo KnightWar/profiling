@@ -112,15 +112,19 @@ app.use(async (req, res, next) => {
       dbInitPromise = initDb()
         .then(() => {
           isDbInitialized = true;
-          dbInitPromise = null;
+          return true;
         })
         .catch(err => {
-          console.error('[DB] Lazy initialization failed:', err);
           dbInitPromise = null;
-          next(err);
+          throw err;
         });
     }
-    await dbInitPromise;
+    try {
+      await dbInitPromise;
+    } catch (err) {
+      console.error('[DB] Lazy initialization failed:', err);
+      return res.status(500).json({ error: `Database initialization failed: ${err.message}` });
+    }
   }
   next();
 });

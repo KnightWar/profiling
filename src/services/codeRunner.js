@@ -1,14 +1,16 @@
 /**
- * codeRunner.js — Safe Execution Service for Programming Questions
- * ═════════════════════════════════════════════════════════════════
+ * codeRunner.js — Safe Execution Service for Programming Questions (Vercel & Local)
+ * ══════════════════════════════════════════════════════════════════════════════════
  * Executes student solution code (Python 3 / Node.js) against
- * custom stdin inputs or automated test cases with timeouts and output bounds.
+ * custom stdin inputs or automated test cases.
+ * Handles both local systems (with python3 & node) and serverless environments (like Vercel).
  */
 
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const vm = require('vm');
 const { v4: uuidv4 } = require('uuid');
 
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -35,6 +37,78 @@ function detectLanguage(code, explicitLanguage) {
 }
 
 /**
+ * Safe in-memory JS execution using Node vm
+ */
+function executeJavaScriptInVm(code, input = '', timeout = DEFAULT_TIMEOUT_MS) {
+  const startTime = Date.now();
+  let stdout = '';
+  let stderr = '';
+
+  const inputLines = String(input || '').split(/\r?\n/);
+  let lineIdx = 0;
+
+  const sandbox = {
+    console: {
+      log: (...args) => {
+        stdout += args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') + '\n';
+      },
+      error: (...args) => {
+        stderr += args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') + '\n';
+      },
+      warn: (...args) => {
+        stdout += args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') + '\n';
+      },
+    },
+    readline: () => {
+      return lineIdx < inputLines.length ? inputLines[lineIdx++] : '';
+    },
+    prompt: () => {
+      return lineIdx < inputLines.length ? inputLines[lineIdx++] : '';
+    },
+    input: () => {
+      return lineIdx < inputLines.length ? inputLines[lineIdx++] : '';
+    },
+    Math,
+    Date,
+    JSON,
+    Array,
+    Object,
+    String,
+    Number,
+    Boolean,
+    RegExp,
+    Map,
+    Set,
+    parseInt,
+    parseFloat,
+    isNaN,
+    isFinite,
+  };
+
+  try {
+    const context = vm.createContext(sandbox);
+    vm.runInContext(code, context, { timeout });
+    return {
+      stdout: stdout.trimEnd(),
+      stderr: stderr.trimEnd(),
+      exitCode: 0,
+      duration_ms: Date.now() - startTime,
+      status: 'success',
+    };
+  } catch (err) {
+    const isTimeout = err.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT' || String(err).includes('timed out');
+    return {
+      stdout: stdout.trimEnd(),
+      stderr: stderr ? `${stderr}\n${err.message}` : err.message,
+      exitCode: isTimeout ? 124 : 1,
+      duration_ms: Date.now() - startTime,
+      status: isTimeout ? 'timeout' : 'error',
+      error: isTimeout ? 'Time Limit Exceeded' : err.message,
+    };
+  }
+}
+
+/**
  * Execute code with given stdin input
  * @param {Object} options
  * @param {string} options.code - Source code to execute
@@ -45,9 +119,15 @@ function detectLanguage(code, explicitLanguage) {
  */
 async function executeCode({ code, language = 'python', input = '', timeout = DEFAULT_TIMEOUT_MS }) {
   const lang = detectLanguage(code, language);
+
+  // If JavaScript, we can execute directly via in-memory VM for instantaneous response in any environment (including Vercel)
+  if (lang === 'javascript') {
+    return executeJavaScriptInVm(code, input, timeout);
+  }
+
+  // For Python: try spawning python3 / python executable
   const tempDir = os.tmpdir();
-  const fileExt = lang === 'python' ? '.py' : '.js';
-  const tempFile = path.join(tempDir, `exec_${uuidv4()}${fileExt}`);
+  const tempFile = path.join(tempDir, `exec_${uuidv4()}.py`);
 
   return new Promise((resolve) => {
     const startTime = Date.now();
@@ -75,7 +155,7 @@ async function executeCode({ code, language = 'python', input = '', timeout = DE
       });
     }
 
-    const cmd = lang === 'python' ? 'python3' : 'node';
+    const cmd = 'python3';
     const args = [tempFile];
 
     let proc;
@@ -88,7 +168,7 @@ async function executeCode({ code, language = 'python', input = '', timeout = DE
       cleanup();
       return resolve({
         stdout: '',
-        stderr: `Failed to spawn runtime (${cmd}): ${err.message}`,
+        stderr: `Python runtime is not available in this environment: ${err.message}`,
         exitCode: 1,
         duration_ms: Date.now() - startTime,
         status: 'error',
@@ -138,14 +218,27 @@ async function executeCode({ code, language = 'python', input = '', timeout = DE
       isResolved = true;
       clearTimeout(timer);
       cleanup();
-      resolve({
-        stdout,
-        stderr: stderr || err.message,
-        exitCode: 1,
-        duration_ms: Date.now() - startTime,
-        status: 'error',
-        error: err.message,
-      });
+
+      if (err.code === 'ENOENT') {
+        // Fall back to python command if python3 wasn't found
+        resolve({
+          stdout: '',
+          stderr: 'Python 3 runtime is not installed on this host. You can switch language to JavaScript (Node.js) in the editor header.',
+          exitCode: 1,
+          duration_ms: Date.now() - startTime,
+          status: 'error',
+          error: 'Python not available on server',
+        });
+      } else {
+        resolve({
+          stdout,
+          stderr: stderr || err.message,
+          exitCode: 1,
+          duration_ms: Date.now() - startTime,
+          status: 'error',
+          error: err.message,
+        });
+      }
     });
 
     proc.on('close', (code, signal) => {

@@ -7,6 +7,7 @@ const { getDb } = require('../db/database');
 const { requireRole } = require('../middleware/roles');
 const { autoGradeResponse, recomputeAllForStudent } = require('../services/scoring');
 const { isChromeUserAgent } = require('../utils/browser-check');
+const { executeCode, runTestCases } = require('../services/codeRunner');
 
 const router = express.Router();
 
@@ -94,13 +95,24 @@ router.post('/exams/:id/start', async (req, res, next) => {
       if (existing.status === 'active') {
         // Return existing session
         const questions = await db.prepare(
-          'SELECT id, type, marks, content, options, sort_order FROM questions WHERE exam_id = ? ORDER BY sort_order, id'
+          'SELECT id, type, marks, content, options, test_cases, sort_order FROM questions WHERE exam_id = ? ORDER BY sort_order, id'
         ).all(examId);
 
-        const parsed = questions.map(q => ({
-          ...q,
-          options: q.options ? JSON.parse(q.options) : null,
-        }));
+        const parsed = questions.map(q => {
+          let parsedOptions = null;
+          let parsedTestCases = null;
+          if (q.options) {
+            try { parsedOptions = typeof q.options === 'string' ? JSON.parse(q.options) : q.options; } catch (e) {}
+          }
+          if (q.test_cases) {
+            try { parsedTestCases = typeof q.test_cases === 'string' ? JSON.parse(q.test_cases) : q.test_cases; } catch (e) {}
+          }
+          return {
+            ...q,
+            options: parsedOptions,
+            test_cases: parsedTestCases,
+          };
+        });
 
         // Get existing responses
         const responses = await db.prepare(
@@ -130,13 +142,24 @@ router.post('/exams/:id/start', async (req, res, next) => {
 
     // Get questions (without answers)
     const questions = await db.prepare(
-      'SELECT id, type, marks, content, options, sort_order FROM questions WHERE exam_id = ? ORDER BY sort_order, id'
+      'SELECT id, type, marks, content, options, test_cases, sort_order FROM questions WHERE exam_id = ? ORDER BY sort_order, id'
     ).all(examId);
 
-    const parsed = questions.map(q => ({
-      ...q,
-      options: q.options ? JSON.parse(q.options) : null,
-    }));
+    const parsed = questions.map(q => {
+      let parsedOptions = null;
+      let parsedTestCases = null;
+      if (q.options) {
+        try { parsedOptions = typeof q.options === 'string' ? JSON.parse(q.options) : q.options; } catch (e) {}
+      }
+      if (q.test_cases) {
+        try { parsedTestCases = typeof q.test_cases === 'string' ? JSON.parse(q.test_cases) : q.test_cases; } catch (e) {}
+      }
+      return {
+        ...q,
+        options: parsedOptions,
+        test_cases: parsedTestCases,
+      };
+    });
 
     res.json({
       session: {
@@ -354,6 +377,56 @@ router.post('/violations', async (req, res, next) => {
       details || ''
     );
     res.json({ message: 'Violation logged' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/student/run-code ─────────────────────────────────────────────
+// Test and execute code with custom input or automated test cases
+router.post('/run-code', async (req, res, next) => {
+  try {
+    const { code, language, input, question_id, run_test_cases } = req.body;
+
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ error: 'No code provided for execution' });
+    }
+
+    const db = getDb();
+
+    // If run_test_cases is requested, look up test_cases for question_id
+    if (run_test_cases && question_id) {
+      const q = await db.prepare('SELECT test_cases FROM questions WHERE id = ?').get(question_id);
+      let testCases = [];
+      if (q && q.test_cases) {
+        try {
+          testCases = typeof q.test_cases === 'string' ? JSON.parse(q.test_cases) : q.test_cases;
+        } catch (e) {
+          testCases = [];
+        }
+      }
+
+      if (!Array.isArray(testCases) || testCases.length === 0) {
+        // Fall back to single execution if no test cases defined
+        const result = await executeCode({ code, language, input: input || '' });
+        return res.json({ mode: 'single', ...result });
+      }
+
+      const suiteResult = await runTestCases({ code, language, testCases });
+      return res.json({ mode: 'test_cases', ...suiteResult });
+    }
+
+    // Execute with custom input
+    const result = await executeCode({
+      code,
+      language,
+      input: input !== undefined ? input : '',
+    });
+
+    res.json({
+      mode: 'single',
+      ...result,
+    });
   } catch (err) {
     next(err);
   }

@@ -324,13 +324,46 @@ function buildQuestionCard(examId) {
       </div>
     </div>
   ` : q.type === 'programming' ? `
-    <div class="programming-editor-container" style="border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: #0d1117; margin-top: 14px;">
-      <div style="background: #161b22; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); font-size: 0.8rem; color: #8b949e;">
-        <div style="display: flex; align-items: center; gap: 8px; font-family: monospace; font-weight: 600;">
-          <i class="ph ph-code" style="color: var(--accent-indigo);"></i>
-          <span>Code Editor (Indentation & Syntax Preserved)</span>
+    <!-- Sample Test Cases Preview (if available) -->
+    ${q.test_cases && Array.isArray(q.test_cases) && q.test_cases.length > 0 ? `
+      <div style="margin-top:14px; margin-bottom:14px; background:rgba(99,102,241,0.05); border:1px solid rgba(99,102,241,0.2); border-radius:8px; padding:12px 14px;">
+        <div style="font-size:0.8rem; font-weight:700; color:var(--accent-light); text-transform:uppercase; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+          <i class="ph ph-flask"></i> Sample Test Cases
         </div>
-        <span class="badge badge-neutral" style="font-size: 0.75rem;">Tab Key Indents 4 Spaces</span>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
+          ${q.test_cases.map((tc, idx) => `
+            <div style="background:#0d1117; border:1px solid #30363d; border-radius:6px; padding:8px 12px; font-size:0.82rem;">
+              <div style="color:#8b949e; font-weight:600; font-size:0.75rem; margin-bottom:4px;">Sample Case #${idx + 1}</div>
+              <div style="margin-bottom:3px;"><span style="color:#8b949e;">Input:</span> <code style="color:#f0f6fc; font-family:monospace;">${escapeHtml(typeof tc.input === 'object' ? JSON.stringify(tc.input) : String(tc.input || '(empty)'))}</code></div>
+              <div><span style="color:#8b949e;">Expected:</span> <code style="color:#34d399; font-family:monospace;">${escapeHtml(typeof tc.expected === 'object' ? JSON.stringify(tc.expected) : String(tc.expected || ''))}</code></div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    <!-- Code Editor -->
+    <div class="programming-editor-container">
+      <div class="code-editor-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="display:flex; align-items:center; gap:6px; font-family:monospace; font-weight:600; color:#f0f6fc;">
+            <i class="ph ph-code" style="color:var(--accent-indigo);"></i>
+            <span>Solution Editor</span>
+          </div>
+          <select id="code-lang-select" class="form-select" style="padding:2px 8px; font-size:0.75rem; height:26px; background:#21262d; border-color:#30363d; color:#f0f6fc; width:auto;">
+            <option value="python">Python 3</option>
+            <option value="javascript">JavaScript (Node.js)</option>
+          </select>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="clearStudentCode(${q.id}, ${examId})" style="padding:2px 8px; font-size:0.75rem; height:26px;">
+            <i class="ph ph-arrow-counter-clockwise"></i> Clear
+          </button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('answer-input').value); showToast('Code copied to clipboard', 'info');" style="padding:2px 8px; font-size:0.75rem; height:26px;">
+            <i class="ph ph-copy"></i> Copy
+          </button>
+          <span class="badge badge-neutral" style="font-size:0.72rem;">Tab = 4 Spaces</span>
+        </div>
       </div>
       <textarea class="form-textarea" id="answer-input" rows="12"
         placeholder="# Write your clean solution code here..."
@@ -339,6 +372,45 @@ function buildQuestionCard(examId) {
         data-gramm="false" data-lt-active="false" data-dashlane-rm="true"
         style="width: 100%; border: none; background: transparent; color: #f0f6fc; font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; font-size: 0.92rem; line-height: 1.6; padding: 14px 16px; tab-size: 4; resize: vertical; outline: none; white-space: pre;"
       >${escapeHtml(currentAnswer)}</textarea>
+    </div>
+
+    <!-- Interactive Code Runner Workbench -->
+    <div class="code-runner-panel" id="code-runner-${q.id}">
+      <div class="code-runner-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <i class="ph ph-play-circle" style="color:var(--accent-light); font-size:1.1rem;"></i>
+          <span style="font-weight:700; color:#f0f6fc; font-size:0.85rem;">Interactive Code Runner</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="runStudentCode(${q.id}, ${examId}, false)" id="btn-run-code">
+            <i class="ph ph-play"></i> Run Code (Ctrl+Enter)
+          </button>
+          ${q.test_cases && Array.isArray(q.test_cases) && q.test_cases.length > 0 ? `
+            <button type="button" class="btn btn-outline btn-sm" onclick="runStudentCode(${q.id}, ${examId}, true)" id="btn-run-tests">
+              <i class="ph ph-flask"></i> Run All Test Cases (${q.test_cases.length})
+            </button>
+          ` : ''}
+        </div>
+      </div>
+      <div class="code-runner-body">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;" class="code-runner-grid">
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <label style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#8b949e;">Custom Test Input (stdin)</label>
+              ${q.test_cases && q.test_cases[0] ? `<button type="button" onclick="loadSampleInput(0)" style="background:none; border:none; color:var(--accent-light); font-size:0.75rem; cursor:pointer;">Load Sample 1 Input</button>` : ''}
+            </div>
+            <textarea id="code-input-stdin" rows="4" class="form-textarea" placeholder="Input passed to standard input..." style="width:100%; font-family:monospace; font-size:0.85rem; background:#010409; border:1px solid #30363d; color:#f0f6fc; resize:vertical;">${escapeHtml(q.test_cases && q.test_cases[0] ? (typeof q.test_cases[0].input === 'object' ? JSON.stringify(q.test_cases[0].input) : String(q.test_cases[0].input || '')) : '')}</textarea>
+          </div>
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <label style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#8b949e;">Execution Output</label>
+              <span id="exec-status-badge" style="font-size:0.75rem; color:#8b949e;">Ready</span>
+            </div>
+            <div id="code-output-terminal" class="code-runner-terminal" style="min-height:94px;">Press "Run Code" to test execution output...</div>
+          </div>
+        </div>
+        <div id="code-test-results-container" style="display:none;"></div>
+      </div>
     </div>
   ` : `
     <textarea class="form-textarea" id="answer-input" rows="6"
@@ -957,6 +1029,138 @@ window.toggleAccordion = function(id) {
   const el = document.getElementById(id);
   if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROGRAMMING CODE RUNNER WORKBENCH HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function loadSampleInput(caseIndex = 0) {
+  const q = examState.questions[examState.currentIdx];
+  if (!q || !q.test_cases || !q.test_cases[caseIndex]) return;
+  const tc = q.test_cases[caseIndex];
+  const inputVal = typeof tc.input === 'object' ? JSON.stringify(tc.input) : String(tc.input || '');
+  const inputEl = document.getElementById('code-input-stdin');
+  if (inputEl) {
+    inputEl.value = inputVal;
+    showToast(`Sample Case #${caseIndex + 1} input loaded`, 'info');
+  }
+}
+
+function clearStudentCode(questionId, examId) {
+  if (!confirm('Clear all code in editor?')) return;
+  const codeInput = document.getElementById('answer-input');
+  if (codeInput) {
+    codeInput.value = '';
+    autoSaveResponse(questionId, '', examId);
+    showToast('Editor cleared', 'info');
+  }
+}
+
+async function runStudentCode(questionId, examId, runTestCases = false) {
+  const codeInput = document.getElementById('answer-input');
+  const code = codeInput ? codeInput.value : (examState.responses[questionId] || '');
+  if (!code || !code.trim()) {
+    showToast('Please enter your solution code before running', 'warning');
+    return;
+  }
+
+  const stdinEl = document.getElementById('code-input-stdin');
+  const input = stdinEl ? stdinEl.value : '';
+  const langSelect = document.getElementById('code-lang-select');
+  const language = langSelect ? langSelect.value : 'python';
+
+  const terminal = document.getElementById('code-output-terminal');
+  const statusBadge = document.getElementById('exec-status-badge');
+  const testResultsContainer = document.getElementById('code-test-results-container');
+  const runBtn = document.getElementById('btn-run-code');
+  const runTestsBtn = document.getElementById('btn-run-tests');
+
+  if (runBtn) runBtn.disabled = true;
+  if (runTestsBtn) runTestsBtn.disabled = true;
+  if (statusBadge) statusBadge.innerHTML = '<span style="color:var(--color-warning);"><i class="ph ph-spinner" style="animation:spin 1s linear infinite;"></i> Running...</span>';
+  if (terminal) terminal.textContent = 'Executing code in secure sandbox...';
+
+  try {
+    const data = await api('/api/student/run-code', {
+      method: 'POST',
+      body: {
+        code,
+        language,
+        input,
+        question_id: questionId,
+        run_test_cases: runTestCases,
+      },
+    });
+
+    if (data.mode === 'test_cases') {
+      if (statusBadge) {
+        statusBadge.innerHTML = data.allPassed
+          ? `<span style="color:var(--color-success); font-weight:700;"><i class="ph ph-check-circle"></i> All ${data.passedCount}/${data.totalCount} Test Cases Passed</span>`
+          : `<span style="color:var(--color-danger); font-weight:700;"><i class="ph ph-x-circle"></i> ${data.passedCount}/${data.totalCount} Test Cases Passed</span>`;
+      }
+
+      if (terminal) {
+        terminal.textContent = `Test Suite Execution Complete:\nPassed: ${data.passedCount}/${data.totalCount}\nStatus: ${data.allPassed ? 'ALL TESTS PASSED ✓' : 'SOME TESTS FAILED ✗'}`;
+      }
+
+      if (testResultsContainer) {
+        testResultsContainer.style.display = 'block';
+        testResultsContainer.innerHTML = `
+          <div style="margin-top:10px; border-top:1px solid #30363d; padding-top:12px;">
+            <div style="font-size:0.8rem; font-weight:700; color:#8b949e; text-transform:uppercase; margin-bottom:8px;">Test Case Results Breakdown</div>
+            ${data.results.map(r => `
+              <div class="test-case-item ${r.passed ? 'pass' : 'fail'}">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                  <span style="font-weight:700; color:#f0f6fc;">Test Case #${r.caseNumber}</span>
+                  <span class="badge ${r.passed ? 'badge-success' : 'badge-danger'}" style="font-size:0.75rem;">${r.passed ? '✓ PASSED' : '✗ FAILED'} (${r.duration_ms}ms)</span>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-family:monospace; font-size:0.8rem; margin-top:4px;">
+                  <div><span style="color:#8b949e;">Input:</span> <span style="color:#f0f6fc;">${escapeHtml(r.input)}</span></div>
+                  <div><span style="color:#8b949e;">Expected:</span> <span style="color:#34d399;">${escapeHtml(r.expected)}</span></div>
+                  <div style="grid-column: 1 / -1;"><span style="color:#8b949e;">Your Output:</span> <span style="color:${r.passed ? '#34d399' : '#f43f5e'};">${escapeHtml(r.actual || '(no output)')}</span></div>
+                  ${r.stderr ? `<div style="grid-column: 1 / -1; color:#f43f5e;"><span style="color:#8b949e;">Error:</span> ${escapeHtml(r.stderr)}</div>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+    } else {
+      if (testResultsContainer) testResultsContainer.style.display = 'none';
+
+      if (statusBadge) {
+        if (data.status === 'success') {
+          statusBadge.innerHTML = `<span style="color:var(--color-success); font-weight:700;"><i class="ph ph-check-circle"></i> Success (${data.duration_ms}ms)</span>`;
+        } else if (data.status === 'timeout') {
+          statusBadge.innerHTML = `<span style="color:var(--color-danger); font-weight:700;"><i class="ph ph-clock-countdown"></i> Timeout (${data.duration_ms}ms)</span>`;
+        } else {
+          statusBadge.innerHTML = `<span style="color:var(--color-danger); font-weight:700;"><i class="ph ph-x-circle"></i> Error (${data.duration_ms}ms)</span>`;
+        }
+      }
+
+      if (terminal) {
+        let out = '';
+        if (data.stdout) out += data.stdout;
+        if (data.stderr) {
+          if (out) out += '\n\n';
+          out += `[STDERR / TRACEBACK]\n${data.stderr}`;
+        }
+        if (!out) out = '(Program executed successfully with no console output)';
+        terminal.textContent = out;
+      }
+    }
+  } catch (err) {
+    if (statusBadge) statusBadge.innerHTML = `<span style="color:var(--color-danger);"><i class="ph ph-x-circle"></i> Request Failed</span>`;
+    if (terminal) terminal.textContent = `Execution request error: ${err.message}`;
+  } finally {
+    if (runBtn) runBtn.disabled = false;
+    if (runTestsBtn) runTestsBtn.disabled = false;
+  }
+}
+
+window.loadSampleInput = loadSampleInput;
+window.clearStudentCode = clearStudentCode;
+window.runStudentCode = runStudentCode;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AUTO-REFRESH: student dashboard (targeted patch)

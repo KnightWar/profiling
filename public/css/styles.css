@@ -632,3 +632,116 @@ a:hover { color: var(--color-purple); }
 .text-center{text-align:center} .text-right{text-align:right} .text-muted{color:var(--text-muted)} .text-sm{font-size:var(--text-sm)}
 .font-mono { font-family: 'JetBrains Mono', 'SF Mono', monospace; }
 .hidden { display: none !important; } .w-full { width: 100%; }
+
+/* ─── Programming & Code Runner Workbench ──────────────────────────────────── */
+.programming-editor-container {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #0d1117;
+  margin-top: var(--sp-4);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.code-editor-header {
+  background: #161b22;
+  padding: 8px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #30363d;
+  font-size: 0.8rem;
+  color: #8b949e;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.code-runner-panel {
+  margin-top: var(--sp-4);
+  background: #0d1117;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.code-runner-header {
+  background: #161b22;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #30363d;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.code-runner-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #8b949e;
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+
+.code-runner-tab.active {
+  background: #21262d;
+  color: #f0f6fc;
+  border-color: #30363d;
+}
+
+.code-runner-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.code-runner-terminal {
+  background: #010409;
+  border: 1px solid #30363d;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #c9d1d9;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.test-case-item {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+}
+
+.test-case-item.pass {
+  border-left: 4px solid var(--color-success);
+}
+
+.test-case-item.fail {
+  border-left: 4px solid var(--color-danger);
+}
+
+.cp-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent-light);
+  margin-right: 6px;
+}

@@ -1643,7 +1643,8 @@ async function renderScoreReports(isBackground = false) {
 
   try {
     const data = await api('/api/scores/all');
-    const s = data.summary;
+    const scoresList = (data && Array.isArray(data.scores)) ? data.scores : [];
+    const s = data?.summary;
 
     const html = `
       <div class="page-header">
@@ -1661,7 +1662,7 @@ async function renderScoreReports(isBackground = false) {
         <div class="stats-grid">
           <div class="stat-card indigo">
             <div class="stat-icon indigo"><i class="ph ph-users"></i></div>
-            <div class="stat-value">${s.total_students}</div>
+            <div class="stat-value">${s.total_students || 0}</div>
             <div class="stat-label">Students Scored</div>
           </div>
           <div class="stat-card emerald">
@@ -1709,7 +1710,7 @@ async function renderScoreReports(isBackground = false) {
               </tr>
             </thead>
             <tbody>
-              ${data.scores.map(sc => `
+              ${scoresList.map(sc => `
                 <tr onclick="viewStudentScoreDetails(${sc.student_id})" style="cursor:pointer;" title="Click to view detailed student score breakdown & AI analysis">
                   <td style="font-weight:600; color:var(--accent-light);">${escapeHtml(sc.name)}</td>
                   <td>${escapeHtml(sc.roll_no || '—')}</td>
@@ -1721,7 +1722,7 @@ async function renderScoreReports(isBackground = false) {
                   <td>${levelBadge(sc.level)}</td>
                 </tr>
               `).join('')}
-              ${data.scores.length === 0 ? '<tr><td colspan="8" class="text-center text-muted" style="padding:32px;">No scores computed yet. Students must complete exams first.</td></tr>' : ''}
+              ${scoresList.length === 0 ? '<tr><td colspan="8" class="text-center text-muted" style="padding:32px;">No student records found.</td></tr>' : ''}
             </tbody>
           </table>
         </div>

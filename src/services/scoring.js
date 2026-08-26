@@ -322,7 +322,7 @@ async function recomputeAllForStudent(studentId) {
 
 async function recomputeAllStudents() {
   const db = getDb();
-  const students = await db.prepare("SELECT id FROM users WHERE role = 'student' AND active = 1").all();
+  const students = await db.prepare("SELECT id FROM users WHERE role = 'student'").all();
   const results = [];
 
   for (const s of students) {

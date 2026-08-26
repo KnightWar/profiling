@@ -21,10 +21,17 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
     const { level, sort = 'total_score', order = 'desc', search } = req.query;
 
     let sql = `
-      SELECT cs.*, u.name, u.email, u.roll_no
-      FROM composite_scores cs
-      JOIN users u ON u.id = cs.student_id
-      WHERE 1=1
+      SELECT u.id as student_id, u.name, u.email, u.roll_no,
+             COALESCE(cs.t_score, 0) as t_score,
+             COALESCE(cs.l_score, 0) as l_score,
+             COALESCE(cs.o_score, 0) as o_score,
+             COALESCE(cs.w_score, 0) as w_score,
+             COALESCE(cs.total_score, 0) as total_score,
+             COALESCE(cs.level, 1) as level,
+             cs.computed_at
+      FROM users u
+      LEFT JOIN composite_scores cs ON cs.student_id = u.id
+      WHERE u.role = 'student'
     `;
     const params = [];
 
@@ -34,14 +41,14 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
     }
 
     if (search) {
-      sql += ' AND (u.name LIKE ? OR u.roll_no LIKE ?)';
-      params.push(`%${search}%`, `%${search}%`);
+      sql += ' AND (u.name LIKE ? OR u.roll_no LIKE ? OR u.email LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     const validSorts = ['total_score', 'name', 't_score', 'l_score', 'o_score', 'w_score', 'level'];
     const sortCol = validSorts.includes(sort)
-      ? (sort === 'name' ? 'u.name' : `cs.${sort}`)
-      : 'cs.total_score';
+      ? (sort === 'name' ? 'u.name' : `COALESCE(cs.${sort}, 0)`)
+      : 'COALESCE(cs.total_score, 0)';
     const sortOrder = order === 'asc' ? 'ASC' : 'DESC';
 
     sql += ` ORDER BY ${sortCol} ${sortOrder}`;
@@ -51,14 +58,16 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
     // Summary stats
     const summary = await db.prepare(`
       SELECT
-        COUNT(*) as total_students,
-        ROUND(CAST(AVG(total_score) AS NUMERIC), 1) as avg_score,
-        MAX(total_score) as max_score,
-        MIN(total_score) as min_score,
-        COUNT(CASE WHEN level = 3 THEN 1 END) as level_3_count,
-        COUNT(CASE WHEN level = 2 THEN 1 END) as level_2_count,
-        COUNT(CASE WHEN level = 1 THEN 1 END) as level_1_count
-      FROM composite_scores
+        COUNT(DISTINCT u.id) as total_students,
+        ROUND(CAST(AVG(COALESCE(cs.total_score, 0)) AS NUMERIC), 1) as avg_score,
+        MAX(COALESCE(cs.total_score, 0)) as max_score,
+        MIN(COALESCE(cs.total_score, 0)) as min_score,
+        COUNT(CASE WHEN cs.level = 3 THEN 1 END) as level_3_count,
+        COUNT(CASE WHEN cs.level = 2 THEN 1 END) as level_2_count,
+        COUNT(CASE WHEN cs.level = 1 OR cs.level IS NULL THEN 1 END) as level_1_count
+      FROM users u
+      LEFT JOIN composite_scores cs ON cs.student_id = u.id
+      WHERE u.role = 'student'
     `).get();
 
     res.json({

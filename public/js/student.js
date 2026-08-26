@@ -693,7 +693,7 @@ function stopOralRecording(qId, examId, finalTranscript) {
 
 function setupProctoring(examId) {
   const isMobile  = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
-  const isChrome  = isGoogleChrome();
+  const isChrome  = typeof isGoogleChrome === 'function' ? isGoogleChrome() : (window.isGoogleChrome ? window.isGoogleChrome() : true);
 
   if (isMobile || !isChrome) {
     document.getElementById('main-content').innerHTML = `

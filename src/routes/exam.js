@@ -35,10 +35,10 @@ router.get('/exams', async (req, res, next) => {
              (SELECT COUNT(*) FROM questions q WHERE q.exam_id = e.id) as question_count,
              (SELECT COALESCE(SUM(s.marks_awarded), 0) FROM responses r
               JOIN scores s ON s.response_id = r.id
-              WHERE r.exam_id = e.id AND r.student_id = $1) as marks_obtained
+              WHERE r.exam_id = e.id AND r.student_id = ?) as marks_obtained
       FROM exams e
       JOIN components c ON c.id = e.component_id
-      LEFT JOIN exam_sessions es ON es.exam_id = e.id AND es.student_id = $2
+      LEFT JOIN exam_sessions es ON es.exam_id = e.id AND es.student_id = ?
       WHERE e.is_published = 1
       ORDER BY c.id, e.exam_number
     `).all(studentId, studentId);
@@ -69,7 +69,10 @@ router.post('/exams/:id/start', async (req, res, next) => {
   try {
     const db = getDb();
     const studentId = req.user.id;
-    const examId = req.params.id;
+    const examId = parseInt(req.params.id, 10);
+    if (isNaN(examId)) {
+      return res.status(400).json({ error: 'Invalid exam ID' });
+    }
 
     const exam = await db.prepare('SELECT * FROM exams WHERE id = ? AND is_published = 1').get(examId);
     if (!exam) {

@@ -663,56 +663,74 @@ function escapeHtml(text) {
 }
 
 function renderRichContent(rawText) {
-  if (!rawText) return '';
-  let text = String(rawText);
+  try {
+    if (!rawText) return '';
+    let text = typeof rawText === 'object' ? JSON.stringify(rawText, null, 2) : String(rawText);
 
-  // Normalize literal escaped newlines (e.g. "\\n" -> "\n")
-  if (text.includes('\\n') && !text.includes('\n')) {
-    text = text.replace(/\\n/g, '\n');
-  }
-
-  // Normalize Windows line endings
-  text = text.replace(/\r\n/g, '\n');
-
-  // Handle Markdown code blocks ```lang \n code \n ```
-  text = text.replace(/```([a-zA-Z0-9_#-]*)[ \t]*\n([\s\S]*?)```/g, (match, lang, code) => {
-    const language = (lang || '').trim() || 'code';
-    return `
-      <div class="code-block-wrapper" style="margin: 12px 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color, #30363d); background: #0d1117;">
-        <div style="background: #161b22; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color, #30363d); font-size: 0.75rem; color: #8b949e; text-transform: uppercase; font-family: monospace; font-weight: 600;">
-          <span>${escapeHtml(language)}</span>
-          <button type="button" class="btn-copy-code" onclick="navigator.clipboard.writeText(this.closest('.code-block-wrapper').querySelector('code').innerText); showToast('Code copied!', 'success');" style="background: none; border: none; color: #8b949e; cursor: pointer; font-size: 0.75rem; padding: 2px 6px;">Copy</button>
-        </div>
-        <pre style="margin: 0; padding: 14px 16px; overflow-x: auto; font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; font-size: 0.9rem; line-height: 1.5; color: #e6edf3; white-space: pre;"><code class="language-${escapeHtml(language)}">${escapeHtml(code.trimEnd())}</code></pre>
-      </div>
-    `;
-  });
-
-  // Handle inline code `code`
-  text = text.replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-family: \'JetBrains Mono\', monospace; font-size: 0.88em; color: var(--accent-emerald, #34d399);">$1</code>');
-
-  // Handle Markdown headers with section styling
-  text = text.replace(/^### (.*$)/gim, '<h4 style="margin: 16px 0 6px; font-size: 1.02rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;"><span class="cp-badge">Section</span>$1</h4>');
-  text = text.replace(/^## (.*$)/gim, '<h3 style="margin: 18px 0 8px; font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">$1</h3>');
-  text = text.replace(/^# (.*$)/gim, '<h2 style="margin: 20px 0 10px; font-size: 1.25rem; font-weight: 800; color: var(--text-primary);">$1</h2>');
-
-  // Handle bold & italic
-  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-
-  // Handle bullet list items
-  text = text.replace(/^- (.*$)/gim, '<li style="margin-left: 20px; list-style-type: disc; margin-bottom: 4px;">$1</li>');
-
-  // Convert standalone newlines (outside code blocks) to <br> or paragraph breaks
-  const parts = text.split(/(<div class="code-block-wrapper"[\s\S]*?<\/div>)/g);
-  const formatted = parts.map(part => {
-    if (part.startsWith('<div class="code-block-wrapper"')) {
-      return part;
+    // Normalize literal escaped newlines (e.g. "\\n" -> "\n")
+    if (text.includes('\\n') && !text.includes('\n')) {
+      text = text.replace(/\\n/g, '\n');
     }
-    return part.replace(/\n\n+/g, '<div style="height: 10px;"></div>').replace(/\n/g, '<br>');
-  }).join('');
 
-  return formatted;
+    // Normalize Windows line endings
+    text = text.replace(/\r\n/g, '\n');
+
+    // Handle Markdown code blocks ```lang \n code \n ```
+    text = text.replace(/```([a-zA-Z0-9_#-]*)[ \t]*\n([\s\S]*?)```/g, (match, lang, code) => {
+      const language = (lang || '').trim() || 'code';
+      const safeCode = (code || '').trimEnd();
+      return `
+        <div class="code-block-wrapper" style="margin: 12px 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color, #30363d); background: #0d1117;">
+          <div style="background: #161b22; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color, #30363d); font-size: 0.75rem; color: #8b949e; text-transform: uppercase; font-family: monospace; font-weight: 600;">
+            <span>${escapeHtml(language)}</span>
+            <button type="button" class="btn-copy-code" onclick="navigator.clipboard.writeText(this.closest('.code-block-wrapper').querySelector('code').innerText); showToast('Code copied!', 'success');" style="background: none; border: none; color: #8b949e; cursor: pointer; font-size: 0.75rem; padding: 2px 6px;">Copy</button>
+          </div>
+          <pre style="margin: 0; padding: 14px 16px; overflow-x: auto; font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; font-size: 0.9rem; line-height: 1.5; color: #e6edf3; white-space: pre;"><code class="language-${escapeHtml(language)}">${escapeHtml(safeCode)}</code></pre>
+        </div>
+      `;
+    });
+
+    // Handle single line / inline block code ```code```
+    text = text.replace(/```([a-zA-Z0-9_#-]*)[ \t]*([\s\S]*?)```/g, (match, lang, code) => {
+      const language = (lang || '').trim() || 'code';
+      const safeCode = (code || '').trim();
+      return `
+        <div class="code-block-wrapper" style="margin: 8px 0; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color, #30363d); background: #0d1117;">
+          <pre style="margin: 0; padding: 10px 14px; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; color: #e6edf3; white-space: pre;"><code>${escapeHtml(safeCode)}</code></pre>
+        </div>
+      `;
+    });
+
+    // Handle inline code `code`
+    text = text.replace(/`([^`]+)`/g, (m, c) => `<code style="background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 0.88em; color: var(--accent-emerald, #34d399);">${escapeHtml(c)}</code>`);
+
+    // Handle Markdown headers with section styling
+    text = text.replace(/^### (.*$)/gim, '<h4 style="margin: 16px 0 6px; font-size: 1.02rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;"><span class="cp-badge">Section</span>$1</h4>');
+    text = text.replace(/^## (.*$)/gim, '<h3 style="margin: 18px 0 8px; font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">$1</h3>');
+    text = text.replace(/^# (.*$)/gim, '<h2 style="margin: 20px 0 10px; font-size: 1.25rem; font-weight: 800; color: var(--text-primary);">$1</h2>');
+
+    // Handle bold & italic
+    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+    // Handle bullet list items
+    text = text.replace(/^- (.*$)/gim, '<li style="margin-left: 20px; list-style-type: disc; margin-bottom: 4px;">$1</li>');
+
+    // Convert standalone newlines (outside code blocks) to <br> or paragraph breaks
+    const parts = text.split(/(<div class="code-block-wrapper"[\s\S]*?<\/div>)/g);
+    const formatted = parts.map(part => {
+      if (!part) return '';
+      if (part.startsWith('<div class="code-block-wrapper"')) {
+        return part;
+      }
+      return part.replace(/\n\n+/g, '<div style="height: 10px;"></div>').replace(/\n/g, '<br>');
+    }).join('');
+
+    return formatted;
+  } catch (err) {
+    console.error('renderRichContent error:', err);
+    return escapeHtml(String(rawText || ''));
+  }
 }
 
 function formatCodeBlock(code, language = 'python') {
@@ -754,6 +772,7 @@ window.escapeHtml = escapeHtml;
 window.renderRichContent = renderRichContent;
 window.formatCodeBlock = formatCodeBlock;
 window.setupCodeTextarea = setupCodeTextarea;
+window.isGoogleChrome = isGoogleChrome;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INIT & CONNECTIVITY

@@ -391,20 +391,40 @@ function buildQuestionCard(examId) {
         </div>
       </div>
       <div class="code-runner-body">
+        ${q.test_cases && Array.isArray(q.test_cases) && q.test_cases.length > 0 ? `
+          <div style="display:flex; align-items:center; gap:6px; margin-bottom:10px; flex-wrap:wrap; padding-bottom:8px; border-bottom:1px solid #21262d;">
+            <span style="font-size:0.75rem; font-weight:700; color:#8b949e; text-transform:uppercase;">Sample Cases:</span>
+            ${q.test_cases.map((tc, idx) => `
+              <button type="button" onclick="loadSampleCase(${idx})" class="btn btn-sm btn-ghost" style="padding:2px 8px; font-size:0.75rem; border:1px solid #30363d; background:#161b22; color:#f0f6fc; border-radius:4px;">
+                Case #${idx + 1}
+              </button>
+            `).join('')}
+            <button type="button" onclick="clearSampleCase()" class="btn btn-sm btn-ghost" style="padding:2px 8px; font-size:0.75rem; color:#8b949e; margin-left:auto;">
+              Clear Inputs
+            </button>
+          </div>
+        ` : ''}
+
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;" class="code-runner-grid">
           <div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-              <label style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#8b949e;">Custom Test Input (stdin)</label>
-              ${q.test_cases && q.test_cases[0] ? `<button type="button" onclick="loadSampleInput(0)" style="background:none; border:none; color:var(--accent-light); font-size:0.75rem; cursor:pointer;">Load Sample 1 Input</button>` : ''}
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              <div>
+                <label style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#8b949e; display:block; margin-bottom:4px;">Sample / Custom Input (stdin)</label>
+                <textarea id="code-input-stdin" rows="3" class="form-textarea" placeholder="Input passed to standard input..." style="width:100%; font-family:monospace; font-size:0.85rem; background:#010409; border:1px solid #30363d; color:#f0f6fc; resize:vertical;">${escapeHtml(q.test_cases && q.test_cases[0] ? (typeof q.test_cases[0].input === 'object' ? JSON.stringify(q.test_cases[0].input) : String(q.test_cases[0].input || '')) : '')}</textarea>
+              </div>
+              <div>
+                <label style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#8b949e; display:block; margin-bottom:4px;">Expected Output (optional verification)</label>
+                <textarea id="code-expected-output" rows="2" class="form-textarea" placeholder="Expected result to compare against..." style="width:100%; font-family:monospace; font-size:0.85rem; background:#010409; border:1px solid #30363d; color:#f0f6fc; resize:vertical;">${escapeHtml(q.test_cases && q.test_cases[0] ? (typeof q.test_cases[0].expected === 'object' ? JSON.stringify(q.test_cases[0].expected) : String(q.test_cases[0].expected || '')) : '')}</textarea>
+              </div>
             </div>
-            <textarea id="code-input-stdin" rows="4" class="form-textarea" placeholder="Input passed to standard input..." style="width:100%; font-family:monospace; font-size:0.85rem; background:#010409; border:1px solid #30363d; color:#f0f6fc; resize:vertical;">${escapeHtml(q.test_cases && q.test_cases[0] ? (typeof q.test_cases[0].input === 'object' ? JSON.stringify(q.test_cases[0].input) : String(q.test_cases[0].input || '')) : '')}</textarea>
           </div>
           <div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
               <label style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#8b949e;">Execution Output</label>
               <span id="exec-status-badge" style="font-size:0.75rem; color:#8b949e;">Ready</span>
             </div>
-            <div id="code-output-terminal" class="code-runner-terminal" style="min-height:94px;">Press "Run Code" to test execution output...</div>
+            <div id="code-output-terminal" class="code-runner-terminal" style="min-height:120px;">Press "Run Code" to test execution output...</div>
+            <div id="code-match-banner" style="display:none; margin-top:8px; padding:6px 10px; border-radius:6px; font-size:0.82rem; font-weight:600;"></div>
           </div>
         </div>
         <div id="code-test-results-container" style="display:none;"></div>
@@ -1161,16 +1181,36 @@ window.toggleAccordion = function(id) {
 // PROGRAMMING CODE RUNNER WORKBENCH HELPERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function loadSampleInput(caseIndex = 0) {
+function loadSampleCase(caseIndex = 0) {
   const q = examState.questions[examState.currentIdx];
   if (!q || !q.test_cases || !q.test_cases[caseIndex]) return;
   const tc = q.test_cases[caseIndex];
   const inputVal = typeof tc.input === 'object' ? JSON.stringify(tc.input) : String(tc.input || '');
+  const expectedVal = typeof tc.expected === 'object' ? JSON.stringify(tc.expected) : String(tc.expected || '');
+
   const inputEl = document.getElementById('code-input-stdin');
-  if (inputEl) {
-    inputEl.value = inputVal;
-    showToast(`Sample Case #${caseIndex + 1} input loaded`, 'info');
-  }
+  if (inputEl) inputEl.value = inputVal;
+
+  const expectedEl = document.getElementById('code-expected-output');
+  if (expectedEl) expectedEl.value = expectedVal;
+
+  const matchBanner = document.getElementById('code-match-banner');
+  if (matchBanner) matchBanner.style.display = 'none';
+
+  showToast(`Sample Case #${caseIndex + 1} loaded`, 'info');
+}
+
+function clearSampleCase() {
+  const inputEl = document.getElementById('code-input-stdin');
+  if (inputEl) inputEl.value = '';
+
+  const expectedEl = document.getElementById('code-expected-output');
+  if (expectedEl) expectedEl.value = '';
+
+  const matchBanner = document.getElementById('code-match-banner');
+  if (matchBanner) matchBanner.style.display = 'none';
+
+  showToast('Test inputs cleared for custom entry', 'info');
 }
 
 const STUDENT_LANGUAGE_STARTERS = {
@@ -1204,10 +1244,13 @@ async function runStudentCode(questionId, examId, runTestCases = false) {
 
   const stdinEl = document.getElementById('code-input-stdin');
   const input = stdinEl ? stdinEl.value : '';
+  const expectedEl = document.getElementById('code-expected-output');
+  const expected_output = expectedEl ? expectedEl.value : '';
   const langSelect = document.getElementById('code-lang-select');
   const language = langSelect ? langSelect.value : 'python';
 
   const terminal = document.getElementById('code-output-terminal');
+  const matchBanner = document.getElementById('code-match-banner');
   const statusBadge = document.getElementById('exec-status-badge');
   const testResultsContainer = document.getElementById('code-test-results-container');
   const runBtn = document.getElementById('btn-run-code');
@@ -1216,6 +1259,7 @@ async function runStudentCode(questionId, examId, runTestCases = false) {
   if (runBtn) runBtn.disabled = true;
   if (runTestsBtn) runTestsBtn.disabled = true;
   if (statusBadge) statusBadge.innerHTML = '';
+  if (matchBanner) matchBanner.style.display = 'none';
   if (terminal) terminal.textContent = 'Running code...';
 
   try {
@@ -1225,6 +1269,7 @@ async function runStudentCode(questionId, examId, runTestCases = false) {
         code,
         language,
         input,
+        expected_output,
         question_id: questionId,
         run_test_cases: runTestCases,
       },
@@ -1232,6 +1277,7 @@ async function runStudentCode(questionId, examId, runTestCases = false) {
 
     if (data.mode === 'test_cases') {
       if (statusBadge) statusBadge.innerHTML = '';
+      if (matchBanner) matchBanner.style.display = 'none';
       if (terminal) {
         terminal.textContent = `Test Suite Execution Complete:\nPassed: ${data.passedCount}/${data.totalCount}`;
       }
@@ -1272,6 +1318,24 @@ async function runStudentCode(questionId, examId, runTestCases = false) {
         if (!out) out = '(No console output)';
         terminal.textContent = out;
       }
+
+      if (matchBanner) {
+        if (data.matched === true) {
+          matchBanner.style.display = 'block';
+          matchBanner.style.background = 'rgba(16, 185, 129, 0.15)';
+          matchBanner.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+          matchBanner.style.color = '#34d399';
+          matchBanner.innerHTML = `<i class="ph ph-check-circle" style="vertical-align:middle; margin-right:4px;"></i> <span>Passed: Output matches expected result!</span>`;
+        } else if (data.matched === false) {
+          matchBanner.style.display = 'block';
+          matchBanner.style.background = 'rgba(244, 63, 94, 0.15)';
+          matchBanner.style.border = '1px solid rgba(244, 63, 94, 0.4)';
+          matchBanner.style.color = '#f43f5e';
+          matchBanner.innerHTML = `<i class="ph ph-x-circle" style="vertical-align:middle; margin-right:4px;"></i> <span>Output differs from expected.<br><span style="font-size:0.75rem; font-weight:normal; color:#cbd5e1;">Expected: <code style="color:#34d399;">${escapeHtml(data.expected_output)}</code> | Got: <code style="color:#f87171;">${escapeHtml(data.stdout ? data.stdout.trim() : '(empty)')}</code></span></span>`;
+        } else {
+          matchBanner.style.display = 'none';
+        }
+      }
     }
   } catch (err) {
     if (statusBadge) statusBadge.innerHTML = `<span style="color:var(--color-danger);"><i class="ph ph-x-circle"></i> Request Failed</span>`;
@@ -1287,7 +1351,8 @@ window.selectMCQ = selectMCQ;
 window.autoSaveResponse = autoSaveResponse;
 window.submitExam = submitExam;
 window.startOralRecording = startOralRecording;
-window.loadSampleInput = loadSampleInput;
+window.loadSampleCase = loadSampleCase;
+window.clearSampleCase = clearSampleCase;
 window.changeLanguageTemplate = changeLanguageTemplate;
 window.runStudentCode = runStudentCode;
 

@@ -408,7 +408,7 @@ router.post('/violations', async (req, res, next) => {
 // Test and execute code with custom input or automated test cases
 router.post('/run-code', async (req, res, next) => {
   try {
-    const { code, language, input, question_id, run_test_cases } = req.body;
+    const { code, language, input, question_id, run_test_cases, expected_output } = req.body;
 
     if (!code || typeof code !== 'string') {
       return res.status(400).json({ error: 'No code provided for execution' });
@@ -445,9 +445,17 @@ router.post('/run-code', async (req, res, next) => {
       input: input !== undefined ? input : '',
     });
 
+    const expectedStr = expected_output !== undefined && expected_output !== null && String(expected_output).trim() !== ''
+      ? String(expected_output).trim()
+      : null;
+    const actualStr = result && result.stdout !== undefined ? String(result.stdout).trim() : '';
+    const matched = expectedStr !== null ? (actualStr === expectedStr) : null;
+
     res.json({
       mode: 'single',
       ...result,
+      expected_output: expectedStr,
+      matched,
     });
   } catch (err) {
     next(err);

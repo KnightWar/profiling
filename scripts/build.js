@@ -91,11 +91,13 @@ async function runBuild() {
   // Update public/index.html to point to hashed core script
   if (fs.existsSync(indexHtmlPath) && manifest['core.js']) {
     let indexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
-    indexHtml = indexHtml.replace(
+    const updatedHtml = indexHtml.replace(
       /<script src="\/dist\/core(\.[a-f0-9]+)?\.js"[^>]*><\/script>/g,
       `<script src="${manifest['core.js']}" defer></script>`
     );
-    fs.writeFileSync(indexHtmlPath, indexHtml);
+    if (updatedHtml !== indexHtml) {
+      fs.writeFileSync(indexHtmlPath, updatedHtml);
+    }
   }
 
   // Generate public/sw.js from template
@@ -105,7 +107,9 @@ async function runBuild() {
     swContent = swContent
       .replace('{{CACHE_VERSION}}', cacheVersion)
       .replace(/\/\*\s*\{\{PRECACHE_URLS\}\}\s*\*\/|\{\{PRECACHE_URLS\}\}/g, formattedUrls);
-    fs.writeFileSync(swDestPath, swContent);
+    if (!fs.existsSync(swDestPath) || fs.readFileSync(swDestPath, 'utf8') !== swContent) {
+      fs.writeFileSync(swDestPath, swContent);
+    }
   }
 
   console.log(`[esbuild] Build complete (version: ${cacheVersion}) → ${outDir}`);

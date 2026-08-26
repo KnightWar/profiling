@@ -55,12 +55,17 @@ if (isPg) {
     createTableIfMissing: true
   });
 } else {
-  const SQLiteStore = require('connect-sqlite3')(session);
-  sessionStore = new SQLiteStore({
-    db: 'sessions.db',
-    dir: path.resolve('./data'),
-    concurrentDB: true,
-  });
+  try {
+    const SQLiteStore = require('connect-sqlite3')(session);
+    sessionStore = new SQLiteStore({
+      db: 'sessions.db',
+      dir: path.resolve('./data'),
+      concurrentDB: true,
+    });
+  } catch (err) {
+    console.warn('[Session] SQLiteStore unavailable, falling back to MemoryStore:', err.message);
+    sessionStore = new session.MemoryStore();
+  }
 }
 
 app.use(session({

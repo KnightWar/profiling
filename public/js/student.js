@@ -740,11 +740,38 @@ function setupProctoring(examId) {
   document.addEventListener('cut',         preventEvent);
   document.addEventListener('paste',       preventEvent);
   document.addEventListener('contextmenu', preventEvent);
+  document.addEventListener('keydown',     handleKeyDown);
+  document.addEventListener('keyup',       handleKeyDown);
+
+  // Enable anti-selection security mode
+  document.body.classList.add('exam-proctoring-active');
+
+  // Suppress browser notifications during exam
+  suppressNotifications();
 
   examState.proctorExamId = examId;
   document.addEventListener('visibilitychange', handleVisibilityChange);
   window.addEventListener('blur', handleBlur);
   document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+  // Periodic auth heartbeat (every 5s) to instantly detect admin lock mid-exam
+  if (examState.heartbeatInterval) clearInterval(examState.heartbeatInterval);
+  examState.heartbeatInterval = setInterval(async () => {
+    if (!examState.proctorExamId) {
+      clearInterval(examState.heartbeatInterval);
+      return;
+    }
+    try {
+      await api('/api/auth/me');
+    } catch (err) {
+      if (err.code === 'UNAUTHORIZED_STUDENT' || err.code === 'STUDENT_LOGIN_LOCKED' || err.status === 401 || err.status === 403) {
+        clearInterval(examState.heartbeatInterval);
+        cleanupProctoring();
+        showToast('Your account has been locked by the administrator.', 'error');
+        handleLogout('UNAUTHORIZED_STUDENT');
+      }
+    }
+  }, 5000);
 
   return true;
 }
@@ -752,6 +779,72 @@ function setupProctoring(examId) {
 function preventEvent(e) {
   e.preventDefault();
   showToast('Copy/paste and right-click are disabled during the exam.', 'warning');
+}
+
+function handleKeyDown(e) {
+  const isPrintScreen = e.key === 'PrintScreen' || e.code === 'PrintScreen' || e.keyCode === 44;
+  const isMacScreenshot = (e.metaKey || e.ctrlKey) && e.shiftKey && (['3', '4', '5', 's', 'S'].includes(e.key));
+  const isPrint = (e.metaKey || e.ctrlKey) && (e.key === 'p' || e.key === 'P');
+
+  if (isPrintScreen || isMacScreenshot || isPrint) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Clear clipboard content
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText('').catch(() => {});
+    }
+
+    flashBlackoutOverlay();
+    logViolation('screenshot_attempt', 'Student attempted a screenshot or screen capture.');
+    showToast('Screenshots and screen printing are strictly disabled during the exam.', 'error');
+    return false;
+  }
+}
+
+function flashBlackoutOverlay() {
+  let blackout = document.getElementById('screenshot-blackout-overlay');
+  if (!blackout) {
+    blackout = document.createElement('div');
+    blackout.id = 'screenshot-blackout-overlay';
+    blackout.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:#000000; z-index:999999; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#ff3b30; font-family:sans-serif; text-align:center; padding:20px;';
+    blackout.innerHTML = `
+      <h1 style="font-size:2.5rem; margin-bottom:1rem;"><i class="ph ph-prohibit"></i> SCREENSHOT PROHIBITED</h1>
+      <p style="font-size:1.2rem; color:#ffffff;">Screenshots, screen capture, and printing are disabled during the exam.</p>
+    `;
+    document.body.appendChild(blackout);
+  }
+  blackout.style.display = 'flex';
+  setTimeout(() => {
+    if (blackout && blackout.parentNode) {
+      blackout.style.display = 'none';
+    }
+  }, 1000);
+}
+
+function suppressNotifications() {
+  if (typeof window.Notification !== 'undefined') {
+    try {
+      if (window.Notification.permission === 'granted' && navigator.serviceWorker) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          registrations.forEach(r => {
+            if (r.getNotifications) {
+              r.getNotifications().then(notifications => notifications.forEach(n => n.close()));
+            }
+          });
+        });
+      }
+    } catch (e) {}
+
+    if (!window._originalNotification) {
+      window._originalNotification = window.Notification;
+    }
+    try {
+      window.Notification = function() {};
+      window.Notification.permission = 'denied';
+      window.Notification.requestPermission = function() { return Promise.resolve('denied'); };
+    } catch (e) {}
+  }
 }
 
 function handleVisibilityChange() {
@@ -809,13 +902,28 @@ async function logViolation(type, details) {
 }
 
 function cleanupProctoring() {
+  if (examState.heartbeatInterval) {
+    clearInterval(examState.heartbeatInterval);
+    examState.heartbeatInterval = null;
+  }
+
   document.removeEventListener('copy',             preventEvent);
   document.removeEventListener('cut',              preventEvent);
   document.removeEventListener('paste',            preventEvent);
   document.removeEventListener('contextmenu',      preventEvent);
+  document.removeEventListener('keydown',          handleKeyDown);
+  document.removeEventListener('keyup',            handleKeyDown);
   document.removeEventListener('visibilitychange', handleVisibilityChange);
   window.removeEventListener('blur',               handleBlur);
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
+
+  document.body.classList.remove('exam-proctoring-active');
+
+  if (window._originalNotification) {
+    try {
+      window.Notification = window._originalNotification;
+    } catch (e) {}
+  }
 
   if (document.fullscreenElement && document.exitFullscreen) {
     document.exitFullscreen().catch(err => console.warn(err));

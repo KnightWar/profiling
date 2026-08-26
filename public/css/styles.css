@@ -745,3 +745,29 @@ a:hover { color: var(--color-purple); }
   color: var(--accent-light);
   margin-right: 6px;
 }
+
+/* ─── EXAM PROCTORING & ANTI-SCREENSHOT SECURITY ───────────────────────────── */
+body.exam-proctoring-active {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+body.exam-proctoring-active img,
+body.exam-proctoring-active video,
+body.exam-proctoring-active pre:not(.code-block-wrapper pre) {
+  -webkit-user-drag: none !important;
+  user-drag: none !important;
+  pointer-events: none !important;
+}
+
+/* Allow text input and code editing inside actual answer inputs */
+body.exam-proctoring-active textarea,
+body.exam-proctoring-active input,
+body.exam-proctoring-active select,
+body.exam-proctoring-active [contenteditable="true"] {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  pointer-events: auto !important;
+}

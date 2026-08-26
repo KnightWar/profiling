@@ -39,8 +39,13 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    if (user.role === 'student' && !isChromeUserAgent(req.headers['user-agent'])) {
-      return res.status(403).json({ error: 'Google Chrome is strictly required for student logins and exams.' });
+    if (user.role === 'student') {
+      if (!user.login_authorized || !user.active) {
+        return res.status(403).json({ error: 'STUDENT_LOGIN_LOCKED', message: 'You are currently locked by the administrator and not authorized to log in.' });
+      }
+      if (!isChromeUserAgent(req.headers['user-agent'])) {
+        return res.status(403).json({ error: 'Google Chrome is strictly required for student logins and exams.' });
+      }
     }
 
     // Set session

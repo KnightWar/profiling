@@ -256,6 +256,12 @@ router.put('/authorizations', async (req, res) => {
     
     await db.prepare(`UPDATE users SET login_authorized = ? WHERE id IN (${placeholders}) AND role = 'student'`)
       .run(val, ...studentIds);
+
+    // If revoking authorization (locking students), clear active_session_id
+    if (!authorized) {
+      await db.prepare(`UPDATE users SET active_session_id = NULL WHERE id IN (${placeholders}) AND role = 'student'`)
+        .run(...studentIds);
+    }
     
     res.json({ message: 'Authorizations updated successfully' });
   } catch (err) {

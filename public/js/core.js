@@ -103,7 +103,7 @@ async function api(url, options = {}, retries = 1) {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      if (res.status === 401 && (data.error === 'UNAUTHORIZED_STUDENT' || data.error === 'EXAM_UNAVAILABLE')) {
+      if ((res.status === 401 || res.status === 403) && (data.error === 'UNAUTHORIZED_STUDENT' || data.error === 'STUDENT_LOGIN_LOCKED' || data.error === 'EXAM_UNAVAILABLE')) {
         handleLogout(data.error);
       }
       const err = new Error(data.error || data.message || `Request failed (${res.status})`);
@@ -469,7 +469,7 @@ async function handleLogout(reason) {
   window.location.hash = '';
   showLogin();
 
-  if (reason === 'UNAUTHORIZED_STUDENT' || reason === 'EXAM_UNAVAILABLE') {
+  if (reason === 'UNAUTHORIZED_STUDENT' || reason === 'STUDENT_LOGIN_LOCKED' || reason === 'EXAM_UNAVAILABLE') {
     const lockOverlay = document.getElementById('student-login-lock-overlay');
     if (lockOverlay) {
       lockOverlay.style.display = 'flex';
@@ -477,7 +477,7 @@ async function handleLogout(reason) {
       if (msg && reason === 'EXAM_UNAVAILABLE') {
         msg.innerHTML = 'The exam is no longer active or the access code is invalid.<br>Please contact your administrator.';
       } else if (msg) {
-        msg.innerHTML = 'You are not authorized to access this exam.<br>Please contact your administrator.';
+        msg.innerHTML = 'Your account has been locked by the administrator.<br>You are not authorized to log in or access exams at this time.';
       }
     }
   } else {

@@ -176,63 +176,13 @@ function executeJavaScriptInVm(code, input = '', timeout = DEFAULT_TIMEOUT_MS) {
   }
 }
 
+const { runPythonInVm } = require('./pythonRunner');
+
 /**
  * Safe in-memory Python fallback execution when python3 binary is unavailable
  */
 function executePythonInVm(code, input = '', timeout = DEFAULT_TIMEOUT_MS) {
-  const startTime = Date.now();
-  let stdout = '';
-  let stderr = '';
-
-  const inputLines = String(input || '').split(/\r?\n/);
-  let lineIdx = 0;
-
-  let jsCode = String(code || '')
-    .replace(/^(\s*)#+(.*)$/gm, '$1//$2')
-    .replace(/\bprint\s*\(([\s\S]*?)\)/g, (m, args) => `console.log(${args})`)
-    .replace(/\binput\s*\((.*?)\)/g, 'readline()')
-    .replace(/\bTrue\b/g, 'true')
-    .replace(/\bFalse\b/g, 'false')
-    .replace(/\bNone\b/g, 'null')
-    .replace(/\blen\s*\(([^)]+)\)/g, '($1 ? $1.length : 0)')
-    .replace(/if\s+__name__\s*==\s*['"]__main__['"]\s*:/g, '// if __name__ == "__main__":');
-
-  const sandbox = {
-    console: {
-      log: (...args) => {
-        stdout += args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') + '\n';
-      },
-      error: (...args) => {
-        stderr += args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') + '\n';
-      },
-    },
-    readline: () => lineIdx < inputLines.length ? inputLines[lineIdx++] : '',
-    prompt: () => lineIdx < inputLines.length ? inputLines[lineIdx++] : '',
-    input: () => lineIdx < inputLines.length ? inputLines[lineIdx++] : '',
-    Math, Date, JSON, Array, Object, String, Number, Boolean, RegExp, Map, Set, parseInt, parseFloat, isNaN, isFinite,
-  };
-
-  try {
-    const context = vm.createContext(sandbox);
-    vm.runInContext(jsCode, context, { timeout });
-    return {
-      stdout: stdout.trimEnd(),
-      stderr: stderr.trimEnd(),
-      exitCode: 0,
-      duration_ms: Date.now() - startTime,
-      status: 'success',
-    };
-  } catch (err) {
-    const isTimeout = err.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT' || String(err).includes('timed out');
-    return {
-      stdout: stdout.trimEnd(),
-      stderr: stderr ? `${stderr}\n${err.message}` : err.message,
-      exitCode: isTimeout ? 124 : 1,
-      duration_ms: Date.now() - startTime,
-      status: isTimeout ? 'timeout' : 'error',
-      error: isTimeout ? 'Time Limit Exceeded' : err.message,
-    };
-  }
+  return runPythonInVm(code, input, timeout);
 }
 
 /**

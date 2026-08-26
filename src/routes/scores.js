@@ -1,5 +1,5 @@
 /**
- * Score Routes — Composite scores, reports, exports
+ * Score Routes — Composite scores, reports, exports (Batch-wise & Overall)
  */
 
 const express = require('express');
@@ -11,11 +11,11 @@ const { analyzeAiContent } = require('../services/aiDetector');
 const router = express.Router();
 
 // ─── GET /api/scores/all ────────────────────────────────────────────────────
-// All composite scores (admin only)
+// All composite scores with optional batch filtering (admin only)
 router.get('/all', requireRole('admin'), async (req, res, next) => {
   try {
     const db = getDb();
-    const { level, sort = 'total_score', order = 'desc', search } = req.query;
+    const { level, sort = 'total_score', order = 'desc', search, batch_id } = req.query;
 
     let sql = `
       SELECT u.id as student_id, u.name, u.email, u.roll_no,
@@ -25,12 +25,24 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
              COALESCE(cs.w_score, 0) as w_score,
              COALESCE(cs.total_score, 0) as total_score,
              COALESCE(cs.level, 1) as level,
-             cs.computed_at
+             cs.computed_at,
+             GROUP_CONCAT(b.name, ', ') as batch_name
       FROM users u
       LEFT JOIN composite_scores cs ON cs.student_id = u.id
+      LEFT JOIN student_batches sb ON sb.student_id = u.id
+      LEFT JOIN batches b ON b.id = sb.batch_id
       WHERE u.role = 'student'
     `;
     const params = [];
+
+    if (batch_id && batch_id !== 'all') {
+      if (batch_id === 'unassigned') {
+        sql += ' AND sb.batch_id IS NULL';
+      } else {
+        sql += ' AND sb.batch_id = ?';
+        params.push(parseInt(batch_id));
+      }
+    }
 
     if (level) {
       sql += ' AND cs.level = ?';
@@ -42,6 +54,8 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
 
+    sql += ' GROUP BY u.id, u.name, u.email, u.roll_no, cs.t_score, cs.l_score, cs.o_score, cs.w_score, cs.total_score, cs.level, cs.computed_at';
+
     const validSorts = ['total_score', 'name', 't_score', 'l_score', 'o_score', 'w_score', 'level'];
     const sortCol = validSorts.includes(sort)
       ? (sort === 'name' ? 'u.name' : `COALESCE(cs.${sort}, 0)`)
@@ -51,6 +65,9 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
     sql += ` ORDER BY ${sortCol} ${sortOrder}`;
 
     const scores = await db.prepare(sql).all(...params);
+
+    // Fetch batches for filter dropdown
+    const batches = await db.prepare('SELECT id, name, description FROM batches ORDER BY name ASC').all();
 
     // Summary stats calculated safely directly from student scores
     const validScores = scores || [];
@@ -75,6 +92,8 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
 
     res.json({
       scores: validScores,
+      batches: batches || [],
+      selected_batch_id: batch_id || 'all',
       summary,
       weights: WEIGHTS,
       compositeMax: COMPOSITE_MAX,
@@ -92,7 +111,15 @@ router.get('/student/:id', requireRole('admin'), async (req, res, next) => {
     try { await recomputeAllForStudent(studentId); } catch (e) { console.error('Student score recompute error:', e); }
 
     const db = getDb();
-    const student = await db.prepare('SELECT id, name, email, roll_no FROM users WHERE id = ?').get(studentId);
+    const student = await db.prepare(`
+      SELECT u.id, u.name, u.email, u.roll_no, GROUP_CONCAT(b.name, ', ') as batch_name
+      FROM users u
+      LEFT JOIN student_batches sb ON sb.student_id = u.id
+      LEFT JOIN batches b ON b.id = sb.batch_id
+      WHERE u.id = ?
+      GROUP BY u.id, u.name, u.email, u.roll_no
+    `).get(studentId);
+
     if (!student) {
       return res.status(404).json({ error: 'Student not found' });
     }
@@ -174,36 +201,59 @@ router.post('/recompute/:studentId', requireRole('admin'), async (req, res) => {
 });
 
 // ─── GET /api/scores/export ─────────────────────────────────────────────────
-// Export all scores as CSV
+// Export scores as CSV with optional batch filtering
 router.get('/export', requireRole('admin'), async (req, res, next) => {
   try {
     const db = getDb();
+    const { batch_id } = req.query;
 
-    const scores = await db.prepare(`
+    let sql = `
       SELECT u.name, u.email, u.roll_no,
-             cs.t_score, cs.l_score, cs.o_score, cs.w_score,
-             cs.total_score, cs.level, cs.computed_at
-      FROM composite_scores cs
-      JOIN users u ON u.id = cs.student_id
-      ORDER BY cs.total_score DESC
-    `).all();
+             COALESCE(cs.t_score, 0) as t_score,
+             COALESCE(cs.l_score, 0) as l_score,
+             COALESCE(cs.o_score, 0) as o_score,
+             COALESCE(cs.w_score, 0) as w_score,
+             COALESCE(cs.total_score, 0) as total_score,
+             COALESCE(cs.level, 1) as level,
+             cs.computed_at,
+             GROUP_CONCAT(b.name, ', ') as batch_name
+      FROM users u
+      LEFT JOIN composite_scores cs ON cs.student_id = u.id
+      LEFT JOIN student_batches sb ON sb.student_id = u.id
+      LEFT JOIN batches b ON b.id = sb.batch_id
+      WHERE u.role = 'student'
+    `;
+    const params = [];
+
+    if (batch_id && batch_id !== 'all') {
+      if (batch_id === 'unassigned') {
+        sql += ' AND sb.batch_id IS NULL';
+      } else {
+        sql += ' AND sb.batch_id = ?';
+        params.push(parseInt(batch_id));
+      }
+    }
+
+    sql += ` GROUP BY u.id, u.name, u.email, u.roll_no, cs.t_score, cs.l_score, cs.o_score, cs.w_score, cs.total_score, cs.level, cs.computed_at ORDER BY cs.total_score DESC`;
+
+    const scores = await db.prepare(sql).all(...params);
 
     // Build CSV
-    const headers = ['Name', 'Email', 'Roll No', 'Technical (/500)', 'Aptitude (/500)',
+    const headers = ['Name', 'Email', 'Roll No', 'Batch', 'Technical (/500)', 'Aptitude (/500)',
       'Oral English (/500)', 'Written English (/500)', 'Composite (/5000)', 'Level', 'Computed At'];
 
     let csv = headers.join(',') + '\n';
     for (const s of scores) {
       const levelName = s.level === 3 ? 'Advanced' : s.level === 2 ? 'Intermediate' : 'Foundational';
       csv += [
-        `"${s.name}"`, `"${s.email}"`, `"${s.roll_no || ''}"`,
+        `"${s.name}"`, `"${s.email}"`, `"${s.roll_no || ''}"`, `"${s.batch_name || 'Unassigned'}"`,
         s.t_score, s.l_score, s.o_score, s.w_score,
         s.total_score, `"Level ${s.level} - ${levelName}"`, `"${s.computed_at || ''}"`
       ].join(',') + '\n';
     }
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=composite_scores_export.csv');
+    res.setHeader('Content-Disposition', `attachment; filename=composite_scores_${batch_id && batch_id !== 'all' ? `batch_${batch_id}` : 'all'}.csv`);
     res.send(csv);
   } catch (err) {
     next(err);

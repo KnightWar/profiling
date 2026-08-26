@@ -1627,13 +1627,16 @@ window.bulkDeleteQuestions = bulkDeleteQuestions;
 // ADMIN: SCORE REPORTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function renderScoreReports(isBackground = false) {
+let currentScoreBatchFilter = 'all';
+
+async function renderScoreReports(isBackground = false, batchId = currentScoreBatchFilter) {
+  currentScoreBatchFilter = batchId;
   const main = document.getElementById('main-content');
-  const cacheKey = '#/admin/scores';
+  const cacheKey = `#/admin/scores?batch=${batchId}`;
 
   if (!isBackground && App.sectionCache[cacheKey]) {
     main.innerHTML = App.sectionCache[cacheKey];
-    renderScoreReports(true);
+    renderScoreReports(true, batchId);
     return;
   }
 
@@ -1642,19 +1645,26 @@ async function renderScoreReports(isBackground = false) {
   }
 
   try {
-    const data = await api('/api/scores/all');
+    const url = batchId && batchId !== 'all' ? `/api/scores/all?batch_id=${batchId}` : '/api/scores/all';
+    const data = await api(url);
     const scoresList = (data && Array.isArray(data.scores)) ? data.scores : [];
+    const batches = (data && Array.isArray(data.batches)) ? data.batches : [];
     const s = data?.summary;
 
     const html = `
       <div class="page-header">
         <div>
           <h1><i class="ph ph-trend-up"></i> Scores & Reports</h1>
-          <p class="page-subtitle">Composite scoring: S = 3T + 3L + 2O + 2W (Max: 5000)</p>
+          <p class="page-subtitle">Composite scoring: S = 3T + 3L + 2O + 2W (Max: 5000) — Batch-wise analytics</p>
         </div>
-        <div class="btn-group">
+        <div class="btn-group" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <select id="score-batch-select" class="form-select" onchange="filterScoresByBatch(this.value)" style="min-width:180px; padding:7px 12px; font-weight:600;">
+            <option value="all" ${batchId === 'all' ? 'selected' : ''}>👥 All Batches</option>
+            ${batches.map(b => `<option value="${b.id}" ${String(batchId) === String(b.id) ? 'selected' : ''}>🏷️ ${escapeHtml(b.name)}</option>`).join('')}
+            <option value="unassigned" ${batchId === 'unassigned' ? 'selected' : ''}>⚠️ Unassigned Students</option>
+          </select>
           <button class="btn btn-outline" onclick="recomputeAll()"><i class="ph ph-arrows-clockwise"></i> Recompute All</button>
-          <a href="/api/scores/export" class="btn btn-success" target="_blank"><i class="ph ph-download-simple"></i> Export CSV</a>
+          <a href="/api/scores/export${batchId && batchId !== 'all' ? `?batch_id=${batchId}` : ''}" class="btn btn-success" target="_blank"><i class="ph ph-download-simple"></i> Export CSV</a>
         </div>
       </div>
 
@@ -1663,7 +1673,7 @@ async function renderScoreReports(isBackground = false) {
           <div class="stat-card indigo">
             <div class="stat-icon indigo"><i class="ph ph-users"></i></div>
             <div class="stat-value">${s.total_students || 0}</div>
-            <div class="stat-label">Students Scored</div>
+            <div class="stat-label">${batchId && batchId !== 'all' ? 'Batch Students' : 'Total Students'}</div>
           </div>
           <div class="stat-card emerald">
             <div class="stat-icon emerald"><i class="ph ph-chart-bar"></i></div>
@@ -1690,17 +1700,19 @@ async function renderScoreReports(isBackground = false) {
 
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">All Student Scores</h3>
+          <h3 class="card-title">Student Scores (${scoresList.length} ${batchId && batchId !== 'all' ? 'in selected batch' : 'total'})</h3>
           <div class="search-bar">
             <span class="search-icon"><i class="ph ph-magnifying-glass"></i></span>
-            <input type="text" class="form-input" placeholder="Search..." id="score-search">
+            <input type="text" class="form-input" placeholder="Search student, roll no, or batch..." id="score-search">
           </div>
         </div>
         <div class="table-container" style="border:none;">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Name</th><th>Roll No</th>
+                <th>Name</th>
+                <th>Roll No</th>
+                <th>Batch</th>
                 <th style="text-align:right;">Tech (/500)</th>
                 <th style="text-align:right;">Apt (/500)</th>
                 <th style="text-align:right;">Oral (/500)</th>
@@ -1714,6 +1726,12 @@ async function renderScoreReports(isBackground = false) {
                 <tr onclick="viewStudentScoreDetails(${sc.student_id})" style="cursor:pointer;" title="Click to view detailed student score breakdown & AI analysis">
                   <td style="font-weight:600; color:var(--accent-light);">${escapeHtml(sc.name)}</td>
                   <td>${escapeHtml(sc.roll_no || '—')}</td>
+                  <td>
+                    ${sc.batch_name 
+                      ? `<span class="badge badge-primary" style="font-size:0.75rem;">${escapeHtml(sc.batch_name)}</span>`
+                      : `<span class="badge" style="background:rgba(148,163,184,0.15); color:#94a3b8; font-size:0.75rem;">Unassigned</span>`
+                    }
+                  </td>
                   <td class="font-mono text-right">${sc.t_score}</td>
                   <td class="font-mono text-right">${sc.l_score}</td>
                   <td class="font-mono text-right">${sc.o_score}</td>
@@ -1722,7 +1740,7 @@ async function renderScoreReports(isBackground = false) {
                   <td>${levelBadge(sc.level)}</td>
                 </tr>
               `).join('')}
-              ${scoresList.length === 0 ? '<tr><td colspan="8" class="text-center text-muted" style="padding:32px;">No student records found.</td></tr>' : ''}
+              ${scoresList.length === 0 ? '<tr><td colspan="9" class="text-center text-muted" style="padding:32px;">No student records found for this batch.</td></tr>' : ''}
             </tbody>
           </table>
         </div>
@@ -1748,6 +1766,10 @@ async function renderScoreReports(isBackground = false) {
   }
 }
 
+window.filterScoresByBatch = function(batchId) {
+  renderScoreReports(false, batchId);
+};
+
 window.viewStudentScoreDetails = async function(studentId) {
   try {
     const data = await api(`/api/scores/student/${studentId}`);
@@ -1762,7 +1784,7 @@ window.viewStudentScoreDetails = async function(studentId) {
         <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color);">
           <div>
             <h4 style="margin: 0 0 2px 0; font-size: 1.1rem; color: var(--text-primary);">${escapeHtml(s.name)}</h4>
-            <div style="font-size: 0.85rem; color: var(--text-muted);">Roll No: ${escapeHtml(s.roll_no || 'N/A')} | ${escapeHtml(s.email)}</div>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">Roll No: ${escapeHtml(s.roll_no || 'N/A')} | Batch: <span style="color:var(--accent-light); font-weight:600;">${escapeHtml(s.batch_name || 'Unassigned')}</span> | ${escapeHtml(s.email)}</div>
           </div>
           <div style="text-align: right;">
             <div style="font-size: 1.3rem; font-weight: 800; color: var(--accent-light);">${c.total_score || 0} / 5000</div>

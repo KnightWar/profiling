@@ -66,6 +66,13 @@ function normalizeQuestionForStorage(q, defaultSource = 'manual') {
   let testCases = null;
   if (q?.test_cases) {
     testCases = typeof q.test_cases === 'string' ? q.test_cases : JSON.stringify(q.test_cases);
+  } else if (type === 'programming') {
+    const text = String(content).toLowerCase();
+    let samples = [ { input: '5', expected: '5' }, { input: '10', expected: '10' } ];
+    if (text.includes('sum') || text.includes('add')) samples = [ { input: '5 10', expected: '15' } ];
+    else if (text.includes('factorial')) samples = [ { input: '5', expected: '120' } ];
+    else if (text.includes('even') || text.includes('odd')) samples = [ { input: '4', expected: 'Even' } ];
+    testCases = JSON.stringify(samples);
   }
 
   let rubric = null;

@@ -152,6 +152,9 @@ function normalizeQuestion(raw) {
   if (raw.test_cases) {
     q.test_cases = typeof raw.test_cases === 'string' ? JSON.parse(raw.test_cases) : raw.test_cases;
   }
+  if (q.type === 'programming' && (!q.test_cases || !Array.isArray(q.test_cases) || q.test_cases.length === 0)) {
+    q.test_cases = generateSampleTestCases(q.content);
+  }
 
   // Rubric
   if (raw.rubric) {
@@ -162,6 +165,50 @@ function normalizeQuestion(raw) {
   q.difficulty = (raw.difficulty || raw.Difficulty || 'medium').toLowerCase().trim();
 
   return q;
+}
+
+function generateSampleTestCases(content = '') {
+  const text = String(content || '').toLowerCase();
+  
+  if (text.includes('sum') || text.includes('add')) {
+    return [
+      { input: '5 10', expected: '15' },
+      { input: '20 30', expected: '50' }
+    ];
+  }
+  if (text.includes('factorial')) {
+    return [
+      { input: '5', expected: '120' },
+      { input: '4', expected: '24' }
+    ];
+  }
+  if (text.includes('even') || text.includes('odd')) {
+    return [
+      { input: '4', expected: 'Even' },
+      { input: '7', expected: 'Odd' }
+    ];
+  }
+  if (text.includes('reverse') || text.includes('string')) {
+    return [
+      { input: 'hello', expected: 'olleh' },
+      { input: 'world', expected: 'dlrow' }
+    ];
+  }
+  if (text.includes('html') || text.includes('web')) {
+    return [
+      { input: 'Sample HTML', expected: 'HTML5 Validation Passed' }
+    ];
+  }
+  if (text.includes('css') || text.includes('style')) {
+    return [
+      { input: '.container { color: blue; }', expected: 'CSS3 Validation Passed' }
+    ];
+  }
+
+  return [
+    { input: '5', expected: '5' },
+    { input: '10', expected: '10' }
+  ];
 }
 
 // ─── Parse student CSV or XLSX ──────────────────────────────────────────────

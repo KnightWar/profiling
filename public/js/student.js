@@ -350,28 +350,27 @@ function buildQuestionCard(examId) {
             <i class="ph ph-code" style="color:var(--accent-indigo);"></i>
             <span>Solution Editor</span>
           </div>
-          <select id="code-lang-select" class="form-select" style="padding:2px 8px; font-size:0.75rem; height:26px; background:#21262d; border-color:#30363d; color:#f0f6fc; width:auto;">
+          <select id="code-lang-select" class="form-select" onchange="changeLanguageTemplate(${q.id}, this.value, ${examId})" style="padding:2px 8px; font-size:0.75rem; height:26px; background:#21262d; border-color:#30363d; color:#f0f6fc; width:auto;">
             <option value="python">Python 3</option>
             <option value="javascript">JavaScript (Node.js)</option>
+            <option value="c">C</option>
+            <option value="cpp">C++</option>
+            <option value="html">HTML5</option>
+            <option value="css">CSS3</option>
           </select>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
-          <button type="button" class="btn btn-outline btn-sm" onclick="clearStudentCode(${q.id}, ${examId})" style="padding:2px 8px; font-size:0.75rem; height:26px;">
-            <i class="ph ph-arrow-counter-clockwise"></i> Clear
-          </button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('answer-input').value); showToast('Code copied to clipboard', 'info');" style="padding:2px 8px; font-size:0.75rem; height:26px;">
-            <i class="ph ph-copy"></i> Copy
-          </button>
           <span class="badge badge-neutral" style="font-size:0.72rem;">Tab = 4 Spaces</span>
         </div>
       </div>
       <textarea class="form-textarea" id="answer-input" rows="12"
-        placeholder="# Write your clean solution code here..."
+        placeholder="Write your clean solution code here..."
         oninput="autoSaveResponse(${q.id}, this.value, ${examId})"
+        onpaste="return false;" oncopy="return false;" oncut="return false;"
         spellcheck="false" autocomplete="off" autocorrect="off"
         data-gramm="false" data-lt-active="false" data-dashlane-rm="true"
         style="width: 100%; border: none; background: transparent; color: #f0f6fc; font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; font-size: 0.92rem; line-height: 1.6; padding: 14px 16px; tab-size: 4; resize: vertical; outline: none; white-space: pre;"
-      >${escapeHtml(currentAnswer)}</textarea>
+      >${escapeHtml(currentAnswer || `def solution(input_data):\n    # Write your Python 3 solution here\n    return input_data\n\nif __name__ == '__main__':\n    import sys\n    input_str = sys.stdin.read().strip()\n    print(solution(input_str))`)}</textarea>
     </div>
 
     <!-- Interactive Code Runner Workbench -->
@@ -1175,14 +1174,22 @@ function loadSampleInput(caseIndex = 0) {
   }
 }
 
-function clearStudentCode(questionId, examId) {
-  if (!confirm('Clear all code in editor?')) return;
-  const codeInput = document.getElementById('answer-input');
-  if (codeInput) {
-    codeInput.value = '';
-    autoSaveResponse(questionId, '', examId);
-    showToast('Editor cleared', 'info');
-  }
+const STUDENT_LANGUAGE_STARTERS = {
+  python: `def solution(input_data):\n    # Write your Python 3 solution here\n    return input_data\n\nif __name__ == '__main__':\n    import sys\n    input_str = sys.stdin.read().strip()\n    print(solution(input_str))`,
+  javascript: `function solution(inputData) {\n    // Write your JavaScript solution here\n    return inputData;\n}\n\nconst input = typeof readline === 'function' ? readline() : '';\nconsole.log(solution(input));`,
+  c: `#include <stdio.h>\n#include <string.h>\n\nvoid solution() {\n    char input[256];\n    if (scanf("%255s", input) == 1) {\n        printf("%s\\n", input);\n    }\n}\n\nint main() {\n    solution();\n    return 0;\n}`,
+  cpp: `#include <iostream>\n#include <string>\nusing namespace std;\n\nvoid solution() {\n    string input;\n    if (cin >> input) {\n        cout << input << endl;\n    }\n}\n\nint main() {\n    solution();\n    return 0;\n}`,
+  html: `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>Solution</title>\n</head>\n<body>\n    <div id="output">Hello World</div>\n</body>\n</html>`,
+  css: `.container {\n    display: flex;\n    justify-content: center;\n    align-items: center;\n    color: #6366f1;\n    font-family: sans-serif;\n}`,
+};
+
+function changeLanguageTemplate(questionId, lang, examId) {
+  const inputEl = document.getElementById('answer-input');
+  if (!inputEl) return;
+  const newCode = STUDENT_LANGUAGE_STARTERS[lang] || STUDENT_LANGUAGE_STARTERS.python;
+  inputEl.value = newCode;
+  autoSaveResponse(questionId, newCode, examId);
+  showToast(`Language template switched to ${lang.toUpperCase()}`, 'info');
 }
 
 async function runStudentCode(questionId, examId, runTestCases = false) {
@@ -1293,7 +1300,7 @@ window.autoSaveResponse = autoSaveResponse;
 window.submitExam = submitExam;
 window.startOralRecording = startOralRecording;
 window.loadSampleInput = loadSampleInput;
-window.clearStudentCode = clearStudentCode;
+window.changeLanguageTemplate = changeLanguageTemplate;
 window.runStudentCode = runStudentCode;
 
 // ═══════════════════════════════════════════════════════════════════════════════

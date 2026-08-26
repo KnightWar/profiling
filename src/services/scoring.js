@@ -216,8 +216,11 @@ async function autoGradeResponse(responseId) {
   await db.prepare(`
     INSERT INTO scores (response_id, marks_awarded, scoring_type, scored_at)
     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(response_id) DO UPDATE SET marks_awarded = ?, scoring_type = ?, scored_at = CURRENT_TIMESTAMP
-  `).run(responseId, marksAwarded, scoringType, marksAwarded, scoringType);
+    ON CONFLICT(response_id) DO UPDATE SET
+      marks_awarded = EXCLUDED.marks_awarded,
+      scoring_type = EXCLUDED.scoring_type,
+      scored_at = CURRENT_TIMESTAMP
+  `).run(responseId, marksAwarded, scoringType);
 
   // Update response status to graded
   await db.prepare("UPDATE responses SET status = 'graded' WHERE id = ?").run(responseId);
@@ -247,10 +250,12 @@ async function recomputeComponentTotal(studentId, componentId) {
     INSERT INTO component_totals (student_id, component_id, total_marks, exams_completed, exams_graded, updated_at)
     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(student_id, component_id) DO UPDATE SET
-      total_marks = ?, exams_completed = ?, exams_graded = ?, updated_at = CURRENT_TIMESTAMP
+      total_marks = EXCLUDED.total_marks,
+      exams_completed = EXCLUDED.exams_completed,
+      exams_graded = EXCLUDED.exams_graded,
+      updated_at = CURRENT_TIMESTAMP
   `).run(
-    studentId, componentId, result.total_marks, result.exams_completed, result.exams_graded,
-    result.total_marks, result.exams_completed, result.exams_graded
+    studentId, componentId, result.total_marks, result.exams_completed, result.exams_graded
   );
 
   return result;
@@ -286,11 +291,15 @@ async function recomputeComposite(studentId) {
     INSERT INTO composite_scores (student_id, t_score, l_score, o_score, w_score, total_score, level, computed_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(student_id) DO UPDATE SET
-      t_score = ?, l_score = ?, o_score = ?, w_score = ?,
-      total_score = ?, level = ?, computed_at = CURRENT_TIMESTAMP
+      t_score = EXCLUDED.t_score,
+      l_score = EXCLUDED.l_score,
+      o_score = EXCLUDED.o_score,
+      w_score = EXCLUDED.w_score,
+      total_score = EXCLUDED.total_score,
+      level = EXCLUDED.level,
+      computed_at = CURRENT_TIMESTAMP
   `).run(
-    studentId, T, L, O, W, total_score, level,
-    T, L, O, W, total_score, level
+    studentId, T, L, O, W, total_score, level
   );
 
   return { t_score: T, l_score: L, o_score: O, w_score: W, total_score, level };

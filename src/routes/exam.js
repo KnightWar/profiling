@@ -230,7 +230,10 @@ router.post('/exams/:id/submit', async (req, res, next) => {
   try {
     const db = getDb();
     const studentId = req.user.id;
-    const examId = req.params.id;
+    const examId = parseInt(req.params.id, 10);
+    if (isNaN(examId)) {
+      return res.status(400).json({ error: 'Invalid exam ID' });
+    }
 
     const session = await db.prepare(
       "SELECT * FROM exam_sessions WHERE student_id = ? AND exam_id = ? AND status = 'active'"
@@ -241,17 +244,19 @@ router.post('/exams/:id/submit', async (req, res, next) => {
     }
 
     // Save any remaining responses from request body
-    const { responses: finalResponses, remarks } = req.body;
+    const { responses: finalResponses, remarks } = req.body || {};
     if (finalResponses && Array.isArray(finalResponses)) {
       const upsert = db.prepare(`
         INSERT INTO responses (student_id, exam_id, question_id, answer_data, submitted_at, status)
         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, 'submitted')
         ON CONFLICT(student_id, question_id) DO UPDATE SET
-          answer_data = ?, submitted_at = CURRENT_TIMESTAMP
+          answer_data = EXCLUDED.answer_data, submitted_at = CURRENT_TIMESTAMP, status = 'submitted'
       `);
 
       for (const r of finalResponses) {
-        await upsert.run(studentId, examId, r.question_id, r.answer_data || '', r.answer_data || '');
+        if (r && r.question_id) {
+          await upsert.run(studentId, examId, r.question_id, r.answer_data || '');
+        }
       }
     }
 

@@ -441,6 +441,27 @@ function buildQuestionCard(examId) {
   `;
 }
 
+// ─── QUESTION NAVIGATION (2.3) ────────────────────────────────────────────────
+
+/** Switch current question index and patch UI */
+function goToQuestion(targetIdx, examId) {
+  if (!examState.questions || targetIdx < 0 || targetIdx >= examState.questions.length) return;
+
+  // Save current answer before switching if input exists
+  const currentQ = examState.questions[examState.currentIdx];
+  if (currentQ) {
+    const inputEl = document.getElementById('answer-input');
+    if (inputEl) {
+      examState.responses[currentQ.id] = inputEl.value;
+      autoSaveResponse(currentQ.id, inputEl.value, examId);
+    }
+  }
+
+  examState.currentIdx = targetIdx;
+  patchExamQuestion(examId);
+  patchQuestionNav(examId);
+}
+
 // ─── DOM PATCH HELPERS (2.3) ─────────────────────────────────────────────────
 
 /** Rebuilds only the navigation dots (answered/current state). */
@@ -1158,6 +1179,11 @@ async function runStudentCode(questionId, examId, runTestCases = false) {
   }
 }
 
+window.goToQuestion = goToQuestion;
+window.selectMCQ = selectMCQ;
+window.autoSaveResponse = autoSaveResponse;
+window.submitExam = submitExam;
+window.startOralRecording = startOralRecording;
 window.loadSampleInput = loadSampleInput;
 window.clearStudentCode = clearStudentCode;
 window.runStudentCode = runStudentCode;

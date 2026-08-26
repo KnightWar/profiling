@@ -75,7 +75,7 @@ function deriveNamespace(url) {
 
 async function api(url, options = {}, retries = 1) {
   const method = (options.method || 'GET').toUpperCase();
-  const timeoutMs = options.timeout || 15000;
+  const timeoutMs = options.timeout || 30000;
   const defaults = {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',

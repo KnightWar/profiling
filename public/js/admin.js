@@ -1731,6 +1731,18 @@ async function renderScoreReports(isBackground = false) {
 
     main.innerHTML = html;
     App.sectionCache[cacheKey] = html;
+
+    const searchInput = document.getElementById('score-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        const rows = main.querySelectorAll('.data-table tbody tr');
+        rows.forEach(row => {
+          const text = row.textContent.toLowerCase();
+          row.style.display = text.includes(query) ? '' : 'none';
+        });
+      });
+    }
   } catch (err) {
     if (!isBackground) main.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
   }

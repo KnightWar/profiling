@@ -14,9 +14,6 @@ const router = express.Router();
 // All composite scores (admin only)
 router.get('/all', requireRole('admin'), async (req, res, next) => {
   try {
-    // Auto-sync scores across all students for fresh data
-    try { await recomputeAllStudents(); } catch (e) { console.error('Auto sync scores error:', e); }
-
     const db = getDb();
     const { level, sort = 'total_score', order = 'desc', search } = req.query;
 
@@ -55,23 +52,29 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
 
     const scores = await db.prepare(sql).all(...params);
 
-    // Summary stats
-    const summary = await db.prepare(`
-      SELECT
-        COUNT(DISTINCT u.id) as total_students,
-        ROUND(CAST(AVG(COALESCE(cs.total_score, 0)) AS NUMERIC), 1) as avg_score,
-        MAX(COALESCE(cs.total_score, 0)) as max_score,
-        MIN(COALESCE(cs.total_score, 0)) as min_score,
-        COUNT(CASE WHEN cs.level = 3 THEN 1 END) as level_3_count,
-        COUNT(CASE WHEN cs.level = 2 THEN 1 END) as level_2_count,
-        COUNT(CASE WHEN cs.level = 1 OR cs.level IS NULL THEN 1 END) as level_1_count
-      FROM users u
-      LEFT JOIN composite_scores cs ON cs.student_id = u.id
-      WHERE u.role = 'student'
-    `).get();
+    // Summary stats calculated safely directly from student scores
+    const validScores = scores || [];
+    const totalStudents = validScores.length;
+    const totalScoreSum = validScores.reduce((sum, s) => sum + (Number(s.total_score) || 0), 0);
+    const avgScore = totalStudents > 0 ? Math.round((totalScoreSum / totalStudents) * 10) / 10 : 0;
+    const maxScore = totalStudents > 0 ? Math.max(...validScores.map(s => Number(s.total_score) || 0)) : 0;
+    const minScore = totalStudents > 0 ? Math.min(...validScores.map(s => Number(s.total_score) || 0)) : 0;
+    const level3Count = validScores.filter(s => Number(s.level) === 3).length;
+    const level2Count = validScores.filter(s => Number(s.level) === 2).length;
+    const level1Count = validScores.filter(s => !s.level || Number(s.level) === 1).length;
+
+    const summary = {
+      total_students: totalStudents,
+      avg_score: avgScore,
+      max_score: maxScore,
+      min_score: minScore,
+      level_3_count: level3Count,
+      level_2_count: level2Count,
+      level_1_count: level1Count,
+    };
 
     res.json({
-      scores,
+      scores: validScores,
       summary,
       weights: WEIGHTS,
       compositeMax: COMPOSITE_MAX,

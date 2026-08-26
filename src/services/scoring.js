@@ -230,10 +230,42 @@ async function autoGradeResponse(responseId) {
   return marksAwarded;
 }
 
+// ─── Auto-grade all pending responses ───────────────────────────────────────
+
+async function autoGradeUngradedResponses() {
+  const db = getDb();
+  try {
+    const responses = await db.prepare(`
+      SELECT r.id FROM responses r
+      LEFT JOIN scores s ON s.response_id = r.id
+      WHERE s.id IS NULL
+    `).all();
+    for (const r of responses) {
+      try { await autoGradeResponse(r.id); } catch (e) {}
+    }
+  } catch (e) {
+    console.error('autoGradeUngradedResponses error:', e);
+  }
+}
+
 // ─── Recompute component total for a student ────────────────────────────────
 
 async function recomputeComponentTotal(studentId, componentId) {
   const db = getDb();
+
+  // First auto-grade any ungraded responses for this student and component
+  try {
+    const ungraded = await db.prepare(`
+      SELECT r.id FROM responses r
+      JOIN exams e ON e.id = r.exam_id
+      LEFT JOIN scores s ON s.response_id = r.id
+      WHERE r.student_id = ? AND e.component_id = ? AND s.id IS NULL
+    `).all(studentId, componentId);
+
+    for (const u of ungraded) {
+      try { await autoGradeResponse(u.id); } catch (e) {}
+    }
+  } catch (e) {}
 
   // Sum all graded scores for this student in this component
   const result = await db.prepare(`
@@ -247,6 +279,10 @@ async function recomputeComponentTotal(studentId, componentId) {
     WHERE e.component_id = ?
   `).get(studentId, componentId);
 
+  const totalMarks = Math.round((Number(result.total_marks) || 0) * 10) / 10;
+  const examsCompleted = Number(result.exams_completed) || 0;
+  const examsGraded = Number(result.exams_graded) || 0;
+
   // Upsert component total
   const existingCt = await db.prepare(
     'SELECT id FROM component_totals WHERE student_id = ? AND component_id = ?'
@@ -255,14 +291,14 @@ async function recomputeComponentTotal(studentId, componentId) {
   if (existingCt) {
     await db.prepare(
       'UPDATE component_totals SET total_marks = ?, exams_completed = ?, exams_graded = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(result.total_marks, result.exams_completed, result.exams_graded, existingCt.id);
+    ).run(totalMarks, examsCompleted, examsGraded, existingCt.id);
   } else {
     await db.prepare(
       'INSERT INTO component_totals (student_id, component_id, total_marks, exams_completed, exams_graded, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)'
-    ).run(studentId, componentId, result.total_marks, result.exams_completed, result.exams_graded);
+    ).run(studentId, componentId, totalMarks, examsCompleted, examsGraded);
   }
 
-  return result;
+  return { total_marks: totalMarks, exams_completed: examsCompleted, exams_graded: examsGraded };
 }
 
 // ─── Recompute composite score for a student ────────────────────────────────
@@ -280,7 +316,7 @@ async function recomputeComposite(studentId) {
 
   const scores = {};
   for (const c of components) {
-    scores[c.name] = c.total_marks;
+    scores[c.name] = Number(c.total_marks) || 0;
   }
 
   const T = scores.technical || 0;
@@ -322,12 +358,19 @@ async function recomputeAllForStudent(studentId) {
 
 async function recomputeAllStudents() {
   const db = getDb();
+  
+  await autoGradeUngradedResponses();
+
   const students = await db.prepare("SELECT id FROM users WHERE role = 'student'").all();
   const results = [];
 
   for (const s of students) {
-    const result = await recomputeAllForStudent(s.id);
-    results.push({ student_id: s.id, ...result });
+    try {
+      const result = await recomputeAllForStudent(s.id);
+      results.push({ student_id: s.id, ...result });
+    } catch (e) {
+      console.error(`Error recomputing student ${s.id}:`, e);
+    }
   }
 
   return results;
@@ -337,6 +380,7 @@ module.exports = {
   computeComposite,
   gradeMCQ,
   autoGradeResponse,
+  autoGradeUngradedResponses,
   recomputeComponentTotal,
   recomputeComposite,
   recomputeAllForStudent,

@@ -6,6 +6,7 @@ const express = require('express');
 const { getDb } = require('../db/database');
 const { requireRole } = require('../middleware/roles');
 const { recomputeComponentTotal, recomputeComposite } = require('../services/scoring');
+const { analyzeAiContent } = require('../services/aiDetector');
 
 const router = express.Router();
 
@@ -65,6 +66,7 @@ router.get('/queue', async (req, res, next) => {
       ...r,
       rubric: r.rubric ? (typeof r.rubric === 'string' ? JSON.parse(r.rubric) : r.rubric) : null,
       options: r.options ? (typeof r.options === 'string' ? JSON.parse(r.options) : r.options) : null,
+      ai_analysis: analyzeAiContent(r.answer_data),
     }));
 
     // Get total count
@@ -112,6 +114,7 @@ router.get('/responses/:id', async (req, res, next) => {
     response.rubric = response.rubric ? JSON.parse(response.rubric) : null;
     response.options = response.options ? JSON.parse(response.options) : null;
     response.test_cases = response.test_cases ? JSON.parse(response.test_cases) : null;
+    response.ai_analysis = analyzeAiContent(response.answer_data);
 
     res.json({ response });
   } catch (err) {

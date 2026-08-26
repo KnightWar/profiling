@@ -1710,9 +1710,9 @@ async function renderScoreReports(isBackground = false) {
             </thead>
             <tbody>
               ${data.scores.map(sc => `
-                <tr>
-                  <td style="font-weight:600; color:var(--text-primary);">${sc.name}</td>
-                  <td>${sc.roll_no || '—'}</td>
+                <tr onclick="viewStudentScoreDetails(${sc.student_id})" style="cursor:pointer;" title="Click to view detailed student score breakdown & AI analysis">
+                  <td style="font-weight:600; color:var(--accent-light);">${escapeHtml(sc.name)}</td>
+                  <td>${escapeHtml(sc.roll_no || '—')}</td>
                   <td class="font-mono text-right">${sc.t_score}</td>
                   <td class="font-mono text-right">${sc.l_score}</td>
                   <td class="font-mono text-right">${sc.o_score}</td>
@@ -1734,6 +1734,91 @@ async function renderScoreReports(isBackground = false) {
     if (!isBackground) main.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${err.message}</p></div>`;
   }
 }
+
+window.viewStudentScoreDetails = async function(studentId) {
+  try {
+    const data = await api(`/api/scores/student/${studentId}`);
+    const s = data.student;
+    const c = data.composite || {};
+    const compTotals = data.componentTotals || [];
+    const exams = data.examBreakdown || [];
+    const responses = data.responses || [];
+
+    const contentHtml = `
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color);">
+          <div>
+            <h4 style="margin: 0 0 2px 0; font-size: 1.1rem; color: var(--text-primary);">${escapeHtml(s.name)}</h4>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">Roll No: ${escapeHtml(s.roll_no || 'N/A')} | ${escapeHtml(s.email)}</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 1.3rem; font-weight: 800; color: var(--accent-light);">${c.total_score || 0} / 5000</div>
+            <div>${levelBadge(c.level)}</div>
+          </div>
+        </div>
+
+        <h4 style="margin: 8px 0 4px; font-size: 0.95rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Component Totals</h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">
+          ${compTotals.map(ct => `
+            <div style="background: var(--bg-surface); padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+              <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">${escapeHtml(ct.display_name)}</div>
+              <div style="font-size: 1.1rem; font-weight: 700; margin-top: 2px;">${ct.total_marks} <span style="font-size: 0.75rem; color: var(--text-muted);">/ ${ct.max_raw_score}</span></div>
+            </div>
+          `).join('')}
+        </div>
+
+        <h4 style="margin: 12px 0 4px; font-size: 0.95rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Exam Performance Breakdown</h4>
+        <div style="overflow-x: auto;">
+          <table class="data-table" style="font-size: 0.85rem;">
+            <thead>
+              <tr>
+                <th>Exam Title</th>
+                <th>Component</th>
+                <th>Status</th>
+                <th style="text-align: right;">Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${exams.map(e => `
+                <tr>
+                  <td style="font-weight: 600;">${escapeHtml(e.title)}</td>
+                  <td>${escapeHtml(e.component_name)}</td>
+                  <td>${statusBadge(e.session_status || 'not_attempted')}</td>
+                  <td style="text-align: right; font-family: monospace; font-weight: 700;">${e.marks_obtained} / ${e.total_marks}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        ${responses.length > 0 ? `
+          <h4 style="margin: 12px 0 4px; font-size: 0.95rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Submitted Answers & AI Detection Analysis</h4>
+          <div style="display: flex; flex-direction: column; gap: 12px; max-height: 280px; overflow-y: auto; padding-right: 4px;">
+            ${responses.map((r, i) => `
+              <div style="background: var(--bg-surface); padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.88rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                  <strong>Q${i + 1}: ${escapeHtml(r.question_content ? r.question_content.substring(0, 70) + '...' : '')}</strong>
+                  <span class="badge badge-info">${r.marks_awarded !== null ? r.marks_awarded : 'Pending'} / ${r.max_marks} marks</span>
+                </div>
+                <div style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 4px;">Answer:</div>
+                <div style="background: var(--bg-body); padding: 6px 10px; border-radius: 4px; font-family: monospace; white-space: pre-wrap; font-size: 0.82rem;">${escapeHtml(r.answer_data || 'No answer')}</div>
+                ${r.ai_analysis ? `
+                  <div style="margin-top: 6px; font-size: 0.78rem; color: ${r.ai_analysis.isAiGenerated ? 'var(--accent-rose)' : 'var(--accent-emerald)'}; font-weight: 600;">
+                    ${escapeHtml(r.ai_analysis.note)}
+                  </div>
+                ` : ''}
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+
+    openModal(`Score Report: ${s.name}`, contentHtml, '<button class="btn btn-secondary" onclick="closeModal()">Close</button>');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
 
 async function recomputeAll() {
   try {

@@ -239,6 +239,35 @@ function buildEvaluatorQueueHtml() {
                         ${escapeHtml(r.answer_data || 'No answer submitted')}
                       </div>
                     `}
+                    ${(() => {
+                      const ai = r.ai_analysis;
+                      if (!ai) return '';
+                      if (ai.isAiGenerated) {
+                        return `
+                          <div style="margin-top: 10px; padding: 12px 14px; background: rgba(244, 63, 94, 0.12); border: 1px solid var(--accent-rose); border-radius: 6px; color: #fecdd3; font-size: 0.85rem; line-height: 1.5;">
+                            <div style="font-weight: 700; color: var(--accent-rose); display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                              <i class="ph ph-warning-circle" style="font-size: 1.1rem;"></i> AI Content Detector Alert (${ai.score}% Confidence)
+                            </div>
+                            <div>${escapeHtml(ai.note)}</div>
+                            ${ai.details && ai.details.length > 0 ? `
+                              <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(244, 63, 94, 0.2); font-size: 0.8rem; color: rgba(255,255,255,0.85);">
+                                <strong>Linguistic Markers Detected:</strong>
+                                <ul style="margin: 4px 0 0 16px; padding: 0;">
+                                  ${ai.details.map(d => `<li>${escapeHtml(d)}</li>`).join('')}
+                                </ul>
+                              </div>
+                            ` : ''}
+                          </div>
+                        `;
+                      } else if (r.answer_data && r.answer_data.trim().length >= 35) {
+                        return `
+                          <div style="margin-top: 8px; font-size: 0.8rem; color: var(--accent-emerald); display: flex; align-items: center; gap: 6px;">
+                            <i class="ph ph-check-circle"></i> Human-written response (${ai.score}% AI detection probability)
+                          </div>
+                        `;
+                      }
+                      return '';
+                    })()}
                   </div>
                   
                   <!-- Model Answer (if any) -->

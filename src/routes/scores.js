@@ -6,6 +6,7 @@ const express = require('express');
 const { getDb } = require('../db/database');
 const { requireRole } = require('../middleware/roles');
 const { recomputeAllStudents, recomputeAllForStudent, WEIGHTS, COMPOSITE_MAX } = require('../services/scoring');
+const { analyzeAiContent } = require('../services/aiDetector');
 
 const router = express.Router();
 
@@ -13,6 +14,9 @@ const router = express.Router();
 // All composite scores (admin only)
 router.get('/all', requireRole('admin'), async (req, res, next) => {
   try {
+    // Auto-sync scores across all students for fresh data
+    try { await recomputeAllStudents(); } catch (e) { console.error('Auto sync scores error:', e); }
+
     const db = getDb();
     const { level, sort = 'total_score', order = 'desc', search } = req.query;
 
@@ -72,9 +76,10 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
 // Detailed score for a specific student (admin)
 router.get('/student/:id', requireRole('admin'), async (req, res, next) => {
   try {
-    const db = getDb();
     const studentId = req.params.id;
+    try { await recomputeAllForStudent(studentId); } catch (e) { console.error('Student score recompute error:', e); }
 
+    const db = getDb();
     const student = await db.prepare('SELECT id, name, email, roll_no FROM users WHERE id = ?').get(studentId);
     if (!student) {
       return res.status(404).json({ error: 'Student not found' });
@@ -106,7 +111,24 @@ router.get('/student/:id', requireRole('admin'), async (req, res, next) => {
       ORDER BY c.id, e.exam_number
     `).all(studentId, studentId);
 
-    res.json({ student, componentTotals, composite, examBreakdown });
+    // Fetch individual responses with AI analysis
+    const responses = await db.prepare(`
+      SELECT r.id, r.question_id, r.answer_data, r.submitted_at, r.status,
+             q.type as question_type, q.content as question_content, q.marks as max_marks,
+             s.marks_awarded
+      FROM responses r
+      JOIN questions q ON q.id = r.question_id
+      LEFT JOIN scores s ON s.response_id = r.id
+      WHERE r.student_id = ?
+      ORDER BY r.submitted_at DESC
+    `).all(studentId);
+
+    const responsesWithAi = responses.map(r => ({
+      ...r,
+      ai_analysis: analyzeAiContent(r.answer_data),
+    }));
+
+    res.json({ student, componentTotals, composite, examBreakdown, responses: responsesWithAi });
   } catch (err) {
     next(err);
   }

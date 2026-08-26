@@ -210,13 +210,20 @@ router.post('/responses', async (req, res, next) => {
       return res.status(400).json({ error: 'Exam time has expired' });
     }
 
-    // Upsert response
-    await db.prepare(`
-      INSERT INTO responses (student_id, exam_id, question_id, answer_data, submitted_at, status)
-      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, 'submitted')
-      ON CONFLICT(student_id, question_id) DO UPDATE SET
-        answer_data = ?, submitted_at = CURRENT_TIMESTAMP
-    `).run(studentId, exam_id, question_id, answer_data || '', answer_data || '');
+    // Save/update response
+    const existing = await db.prepare(
+      'SELECT id FROM responses WHERE student_id = ? AND question_id = ?'
+    ).get(studentId, question_id);
+
+    if (existing) {
+      await db.prepare(
+        "UPDATE responses SET answer_data = ?, submitted_at = CURRENT_TIMESTAMP, status = 'submitted' WHERE id = ?"
+      ).run(answer_data || '', existing.id);
+    } else {
+      await db.prepare(
+        "INSERT INTO responses (student_id, exam_id, question_id, answer_data, submitted_at, status) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, 'submitted')"
+      ).run(studentId, exam_id, question_id, answer_data || '');
+    }
 
     res.json({ message: 'Response saved' });
   } catch (err) {
@@ -246,16 +253,23 @@ router.post('/exams/:id/submit', async (req, res, next) => {
     // Save any remaining responses from request body
     const { responses: finalResponses, remarks } = req.body || {};
     if (finalResponses && Array.isArray(finalResponses)) {
-      const upsert = db.prepare(`
-        INSERT INTO responses (student_id, exam_id, question_id, answer_data, submitted_at, status)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, 'submitted')
-        ON CONFLICT(student_id, question_id) DO UPDATE SET
-          answer_data = EXCLUDED.answer_data, submitted_at = CURRENT_TIMESTAMP, status = 'submitted'
-      `);
-
       for (const r of finalResponses) {
         if (r && r.question_id) {
-          await upsert.run(studentId, examId, r.question_id, r.answer_data || '');
+          const qId = parseInt(r.question_id, 10);
+          const ans = r.answer_data || '';
+          const existing = await db.prepare(
+            'SELECT id FROM responses WHERE student_id = ? AND question_id = ?'
+          ).get(studentId, qId);
+
+          if (existing) {
+            await db.prepare(
+              "UPDATE responses SET answer_data = ?, submitted_at = CURRENT_TIMESTAMP, status = 'submitted' WHERE id = ?"
+            ).run(ans, existing.id);
+          } else {
+            await db.prepare(
+              "INSERT INTO responses (student_id, exam_id, question_id, answer_data, submitted_at, status) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, 'submitted')"
+            ).run(studentId, examId, qId, ans);
+          }
         }
       }
     }

@@ -369,7 +369,7 @@ function buildQuestionCard(examId) {
         spellcheck="false" autocomplete="off" autocorrect="off"
         data-gramm="false" data-lt-active="false" data-dashlane-rm="true"
         style="width: 100%; border: none; background: transparent; color: #f0f6fc; font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; font-size: 0.92rem; line-height: 1.6; padding: 14px 16px; tab-size: 4; resize: vertical; outline: none; white-space: pre;"
-      >${escapeHtml(currentAnswer || `def solution(input_data):\n    # Write your Python 3 solution here\n    return input_data\n\nif __name__ == '__main__':\n    import sys\n    input_str = sys.stdin.read().strip()\n    print(solution(input_str))`)}</textarea>
+      >${escapeHtml(currentAnswer || `def solution(input_data):\n    # Write your solution logic here\n    return input_data\n\nif __name__ == '__main__':\n    import sys\n    input_str = sys.stdin.read().strip()\n    result = solution(input_str)\n    if result is not None:\n        print(result)`)}</textarea>
     </div>
 
     <!-- Interactive Code Runner Workbench -->
@@ -1174,11 +1174,15 @@ function loadSampleInput(caseIndex = 0) {
 }
 
 const STUDENT_LANGUAGE_STARTERS = {
-  python: `def solution(input_data):\n    # Write your Python 3 solution here\n    return input_data\n\nif __name__ == '__main__':\n    import sys\n    input_str = sys.stdin.read().strip()\n    print(solution(input_str))`,
-  javascript: `function solution(inputData) {\n    // Write your JavaScript solution here\n    return inputData;\n}\n\nconst input = typeof readline === 'function' ? readline() : '';\nconsole.log(solution(input));`,
-  c: `#include <stdio.h>\n#include <string.h>\n\nvoid solution() {\n    char input[256];\n    if (scanf("%255s", input) == 1) {\n        printf("%s\\n", input);\n    }\n}\n\nint main() {\n    solution();\n    return 0;\n}`,
-  cpp: `#include <iostream>\n#include <string>\nusing namespace std;\n\nvoid solution() {\n    string input;\n    if (cin >> input) {\n        cout << input << endl;\n    }\n}\n\nint main() {\n    solution();\n    return 0;\n}`,
-  html_css: `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>HTML & CSS Solution</title>\n    <style>\n        body {\n            font-family: sans-serif;\n            background: #0f172a;\n            color: #f8fafc;\n            padding: 20px;\n        }\n        .container {\n            color: #38bdf8;\n            font-size: 18px;\n        }\n    </style>\n</head>\n<body>\n    <div class="container">Hello World</div>\n</body>\n</html>`,
+  python: `def solution(input_data):\n    # Write your solution logic here\n    return input_data\n\nif __name__ == '__main__':\n    import sys\n    input_str = sys.stdin.read().strip()\n    result = solution(input_str)\n    if result is not None:\n        print(result)`,
+
+  javascript: `function solution(inputData) {\n    // Write your solution logic here\n    return inputData;\n}\n\nconst input = typeof readline === 'function' ? readline() : '';\nconst result = solution(input);\nif (result !== undefined) {\n    console.log(result);\n}`,
+
+  c: `#include <stdio.h>\n#include <string.h>\n\nchar* solution(char* input) {\n    // Write your solution logic here\n    return input;\n}\n\nint main() {\n    char input[1024] = "";\n    if (scanf("%1023s", input) == 1) {\n        printf("%s\\n", solution(input));\n    } else {\n        printf("%s\\n", solution(input));\n    }\n    return 0;\n}`,
+
+  cpp: `#include <iostream>\n#include <string>\nusing namespace std;\n\nstring solution(string input) {\n    // Write your solution logic here\n    return input;\n}\n\nint main() {\n    string input;\n    if (cin >> input) {\n        cout << solution(input) << endl;\n    } else {\n        cout << solution("") << endl;\n    }\n    return 0;\n}`,
+
+  html_css: `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>Solution</title>\n    <style>\n        body {\n            font-family: sans-serif;\n            background: #0f172a;\n            color: #f8fafc;\n            padding: 20px;\n        }\n        .container {\n            color: #38bdf8;\n            font-size: 18px;\n        }\n    </style>\n</head>\n<body>\n    <div class="container">Hello World</div>\n</body>\n</html>`,
 };
 
 function changeLanguageTemplate(questionId, lang, examId) {

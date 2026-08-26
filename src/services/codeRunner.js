@@ -1,9 +1,10 @@
 /**
  * codeRunner.js — Safe Execution Service for Programming Questions (Vercel & Local)
  * ══════════════════════════════════════════════════════════════════════════════════
- * Executes student solution code across 5 programming choices:
- * C, C++, Python 3, HTML & CSS, JavaScript (Node.js)
- * Handles both local native execution and safe serverless VM fallback (Vercel).
+ * Safe execution service supporting 5 language options:
+ * Python 3, JavaScript (Node.js), C, C++, HTML & CSS
+ * All templates include valid function signatures (e.g. solution(input)) that read stdin,
+ * execute logic, and output results without any syntax errors out-of-the-box.
  */
 
 const { spawn } = require('child_process');
@@ -17,15 +18,87 @@ const DEFAULT_TIMEOUT_MS = 5000;
 const MAX_OUTPUT_BYTES = 512 * 1024; // 512 KB
 
 const LANGUAGE_STARTERS = {
-  python: `def solution(input_data):\n    # Write your Python 3 solution here\n    return input_data\n\nif __name__ == '__main__':\n    import sys\n    input_str = sys.stdin.read().strip()\n    print(solution(input_str))`,
+  python: `def solution(input_data):
+    # Write your solution logic here
+    return input_data
 
-  javascript: `function solution(inputData) {\n    // Write your JavaScript solution here\n    return inputData;\n}\n\nconst input = typeof readline === 'function' ? readline() : '';\nconsole.log(solution(input));`,
+if __name__ == '__main__':
+    import sys
+    input_str = sys.stdin.read().strip()
+    result = solution(input_str)
+    if result is not None:
+        print(result)`,
 
-  c: `#include <stdio.h>\n#include <string.h>\n\nvoid solution() {\n    char input[256];\n    if (scanf("%255s", input) == 1) {\n        printf("%s\\n", input);\n    }\n}\n\nint main() {\n    solution();\n    return 0;\n}`,
+  javascript: `function solution(inputData) {
+    // Write your solution logic here
+    return inputData;
+}
 
-  cpp: `#include <iostream>\n#include <string>\nusing namespace std;\n\nvoid solution() {\n    string input;\n    if (cin >> input) {\n        cout << input << endl;\n    }\n}\n\nint main() {\n    solution();\n    return 0;\n}`,
+const input = typeof readline === 'function' ? readline() : '';
+const result = solution(input);
+if (result !== undefined) {
+    console.log(result);
+}`,
 
-  html_css: `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>HTML & CSS Solution</title>\n    <style>\n        body {\n            font-family: sans-serif;\n            background: #0f172a;\n            color: #f8fafc;\n            padding: 20px;\n        }\n        .container {\n            color: #38bdf8;\n            font-size: 18px;\n        }\n    </style>\n</head>\n<body>\n    <div class="container">Hello World</div>\n</body>\n</html>`,
+  c: `#include <stdio.h>
+#include <string.h>
+
+char* solution(char* input) {
+    // Write your solution logic here
+    return input;
+}
+
+int main() {
+    char input[1024] = "";
+    if (scanf("%1023s", input) == 1) {
+        printf("%s\\n", solution(input));
+    } else {
+        printf("%s\\n", solution(input));
+    }
+    return 0;
+}`,
+
+  cpp: `#include <iostream>
+#include <string>
+using namespace std;
+
+string solution(string input) {
+    // Write your solution logic here
+    return input;
+}
+
+int main() {
+    string input;
+    if (cin >> input) {
+        cout << solution(input) << endl;
+    } else {
+        cout << solution("") << endl;
+    }
+    return 0;
+}`,
+
+  html_css: `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Solution</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 20px;
+        }
+        .container {
+            color: #38bdf8;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">Hello World</div>
+</body>
+</html>`,
 };
 
 /**
@@ -48,7 +121,7 @@ function detectLanguage(code, explicitLanguage) {
   if (/^\s*(def |import |from |print\b|class \w+:|elif |if __name__)/m.test(s)) return 'python';
   if (/^\s*(function|const |let |var |console\.log|module\.exports)/m.test(s)) return 'javascript';
 
-  return 'python'; // Default
+  return 'python';
 }
 
 /**
@@ -175,7 +248,7 @@ function executeCppInVm(code, input = '', timeout = DEFAULT_TIMEOUT_MS) {
   const coutMatches = code.match(/cout\s*<<\s*([^;]+);/g) || [];
 
   if (cleanInput) {
-    stdout += cleanInput;
+    stdout = cleanInput;
   } else if (printfMatches.length > 0 || coutMatches.length > 0) {
     printfMatches.forEach(m => {
       const match = m.match(/printf\s*\(\s*"([^"]+)"/);
@@ -197,7 +270,7 @@ function executeCppInVm(code, input = '', timeout = DEFAULT_TIMEOUT_MS) {
 }
 
 /**
- * HTML & CSS Evaluator - Outputs raw source code output directly
+ * HTML & CSS Evaluator - Outputs raw source code directly
  */
 function executeHtmlCss(code) {
   const startTime = Date.now();

@@ -1,5 +1,5 @@
 /**
- * Score Routes — Composite scores, reports, exports (Batch-wise & Overall)
+ * Score Routes — Composite scores, reports, exports (Batch-wise & Exam Breakdown Dropdowns)
  */
 
 const express = require('express');
@@ -11,7 +11,7 @@ const { analyzeAiContent } = require('../services/aiDetector');
 const router = express.Router();
 
 // ─── GET /api/scores/all ────────────────────────────────────────────────────
-// All composite scores with optional batch filtering (admin only)
+// All composite scores with optional batch filtering and per-exam breakdowns (admin only)
 router.get('/all', requireRole('admin'), async (req, res, next) => {
   try {
     const db = getDb();
@@ -69,6 +69,45 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
     // Fetch batches for filter dropdown
     const batches = await db.prepare('SELECT id, name, description FROM batches ORDER BY name ASC').all();
 
+    // Fetch individual exam scores for all students to power the dropdowns
+    const examScoresRaw = await db.prepare(`
+      SELECT 
+        r.student_id,
+        c.name as component_name,
+        e.id as exam_id,
+        e.exam_number,
+        e.title as exam_title,
+        e.total_marks,
+        COALESCE(SUM(s.marks_awarded), 0) as score
+      FROM responses r
+      JOIN exams e ON e.id = r.exam_id
+      JOIN components c ON c.id = e.component_id
+      LEFT JOIN scores s ON s.response_id = r.id
+      GROUP BY r.student_id, c.name, e.id, e.exam_number, e.title, e.total_marks
+      ORDER BY e.exam_number ASC
+    `).all();
+
+    const examScoresMap = {};
+    for (const row of (examScoresRaw || [])) {
+      if (!examScoresMap[row.student_id]) {
+        examScoresMap[row.student_id] = {
+          technical: [],
+          aptitude: [],
+          oral_english: [],
+          written_english: [],
+        };
+      }
+      if (examScoresMap[row.student_id][row.component_name]) {
+        examScoresMap[row.student_id][row.component_name].push({
+          exam_id: row.exam_id,
+          exam_number: row.exam_number,
+          exam_title: row.exam_title,
+          total_marks: row.total_marks,
+          score: Math.round((Number(row.score) || 0) * 10) / 10,
+        });
+      }
+    }
+
     // Summary stats calculated safely directly from student scores
     const validScores = scores || [];
     const totalStudents = validScores.length;
@@ -90,8 +129,18 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
       level_1_count: level1Count,
     };
 
+    const scoresWithBreakdown = validScores.map(s => ({
+      ...s,
+      exam_breakdown: examScoresMap[s.student_id] || {
+        technical: [],
+        aptitude: [],
+        oral_english: [],
+        written_english: [],
+      },
+    }));
+
     res.json({
-      scores: validScores,
+      scores: scoresWithBreakdown,
       batches: batches || [],
       selected_batch_id: batch_id || 'all',
       summary,

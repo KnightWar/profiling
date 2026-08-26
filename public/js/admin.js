@@ -1629,6 +1629,62 @@ window.bulkDeleteQuestions = bulkDeleteQuestions;
 
 let currentScoreBatchFilter = 'all';
 
+function renderComponentScoreCell(studentId, componentKey, componentTitle, scoreVal, examList) {
+  const ddId = `score_dd_${studentId}_${componentKey}`;
+  const exams = Array.isArray(examList) ? examList : [];
+
+  return `
+    <td class="font-mono text-right" style="position:relative;">
+      <div style="display:inline-block; position:relative;">
+        <button type="button" class="btn btn-sm btn-ghost score-breakdown-btn"
+          onclick="event.stopPropagation(); toggleScoreDropdown('${ddId}')"
+          title="Click to view ${componentTitle} exams list"
+          style="display:inline-flex; align-items:center; gap:4px; font-family:monospace; padding:3px 8px; border-radius:4px; font-weight:600; color:var(--text-primary); cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08);">
+          <span>${scoreVal}</span>
+          <i class="ph ph-caret-down" style="font-size:0.75rem; color:var(--text-muted);"></i>
+        </button>
+        <div id="${ddId}" class="score-dropdown-menu" style="display:none; position:absolute; right:0; top:calc(100% + 4px); background:#1e293b; border:1px solid #334155; border-radius:8px; box-shadow:0 12px 28px -4px rgba(0,0,0,0.6); z-index:999; min-width:240px; max-width:320px; text-align:left; padding:8px 0; font-family:sans-serif;">
+          <div style="padding:6px 12px; font-size:0.78rem; font-weight:700; text-transform:uppercase; color:#94a3b8; border-bottom:1px solid #334155; display:flex; justify-content:space-between; align-items:center;">
+            <span>${componentTitle}</span>
+            <span style="color:#38bdf8;">${scoreVal} / 500</span>
+          </div>
+          <div style="max-height:200px; overflow-y:auto; padding:4px 0;">
+            ${exams.length > 0 ? exams.map(e => `
+              <div style="padding:6px 12px; font-size:0.8rem; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.04);">
+                <span style="color:#f1f5f9; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px;">${escapeHtml(e.exam_title || `Exam #${e.exam_number}`)}</span>
+                <span style="font-family:monospace; font-weight:700; color:${e.score > 0 ? '#34d399' : '#94a3b8'};">${e.score} / ${e.total_marks}</span>
+              </div>
+            `).join('') : '<div style="padding:10px 12px; font-size:0.78rem; color:#64748b; text-align:center;">No exams attempted</div>'}
+          </div>
+        </div>
+      </div>
+    </td>
+  `;
+}
+
+window.toggleScoreDropdown = function(ddId) {
+  const target = document.getElementById(ddId);
+  if (!target) return;
+  const isVisible = target.style.display === 'block';
+
+  // Close all open dropdowns
+  document.querySelectorAll('.score-dropdown-menu').forEach(el => {
+    el.style.display = 'none';
+  });
+
+  if (!isVisible) {
+    target.style.display = 'block';
+  }
+};
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.score-breakdown-btn') && !e.target.closest('.score-dropdown-menu')) {
+    document.querySelectorAll('.score-dropdown-menu').forEach(el => {
+      el.style.display = 'none';
+    });
+  }
+});
+
 async function renderScoreReports(isBackground = false, batchId = currentScoreBatchFilter) {
   currentScoreBatchFilter = batchId;
   const main = document.getElementById('main-content');
@@ -1722,7 +1778,9 @@ async function renderScoreReports(isBackground = false, batchId = currentScoreBa
               </tr>
             </thead>
             <tbody>
-              ${scoresList.map(sc => `
+              ${scoresList.map(sc => {
+                const eb = sc.exam_breakdown || {};
+                return `
                 <tr onclick="viewStudentScoreDetails(${sc.student_id})" style="cursor:pointer;" title="Click to view detailed student score breakdown & AI analysis">
                   <td style="font-weight:600; color:var(--accent-light);">${escapeHtml(sc.name)}</td>
                   <td>${escapeHtml(sc.roll_no || '—')}</td>
@@ -1732,14 +1790,14 @@ async function renderScoreReports(isBackground = false, batchId = currentScoreBa
                       : `<span class="badge" style="background:rgba(148,163,184,0.15); color:#94a3b8; font-size:0.75rem;">Unassigned</span>`
                     }
                   </td>
-                  <td class="font-mono text-right">${sc.t_score}</td>
-                  <td class="font-mono text-right">${sc.l_score}</td>
-                  <td class="font-mono text-right">${sc.o_score}</td>
-                  <td class="font-mono text-right">${sc.w_score}</td>
+                  ${renderComponentScoreCell(sc.student_id, 'tech', 'Technical', sc.t_score, eb.technical)}
+                  ${renderComponentScoreCell(sc.student_id, 'apt', 'Logical & Aptitude', sc.l_score, eb.aptitude)}
+                  ${renderComponentScoreCell(sc.student_id, 'oral', 'Oral English', sc.o_score, eb.oral_english)}
+                  ${renderComponentScoreCell(sc.student_id, 'written', 'Written English', sc.w_score, eb.written_english)}
                   <td class="font-mono text-right" style="font-weight:700; color:var(--text-primary);">${sc.total_score}</td>
                   <td>${levelBadge(sc.level)}</td>
                 </tr>
-              `).join('')}
+              `}).join('')}
               ${scoresList.length === 0 ? '<tr><td colspan="9" class="text-center text-muted" style="padding:32px;">No student records found for this batch.</td></tr>' : ''}
             </tbody>
           </table>

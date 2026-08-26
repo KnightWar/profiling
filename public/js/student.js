@@ -355,8 +355,7 @@ function buildQuestionCard(examId) {
             <option value="javascript">JavaScript (Node.js)</option>
             <option value="c">C</option>
             <option value="cpp">C++</option>
-            <option value="html">HTML5</option>
-            <option value="css">CSS3</option>
+            <option value="html_css">HTML & CSS</option>
           </select>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
@@ -1179,8 +1178,7 @@ const STUDENT_LANGUAGE_STARTERS = {
   javascript: `function solution(inputData) {\n    // Write your JavaScript solution here\n    return inputData;\n}\n\nconst input = typeof readline === 'function' ? readline() : '';\nconsole.log(solution(input));`,
   c: `#include <stdio.h>\n#include <string.h>\n\nvoid solution() {\n    char input[256];\n    if (scanf("%255s", input) == 1) {\n        printf("%s\\n", input);\n    }\n}\n\nint main() {\n    solution();\n    return 0;\n}`,
   cpp: `#include <iostream>\n#include <string>\nusing namespace std;\n\nvoid solution() {\n    string input;\n    if (cin >> input) {\n        cout << input << endl;\n    }\n}\n\nint main() {\n    solution();\n    return 0;\n}`,
-  html: `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>Solution</title>\n</head>\n<body>\n    <div id="output">Hello World</div>\n</body>\n</html>`,
-  css: `.container {\n    display: flex;\n    justify-content: center;\n    align-items: center;\n    color: #6366f1;\n    font-family: sans-serif;\n}`,
+  html_css: `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>HTML & CSS Solution</title>\n    <style>\n        body {\n            font-family: sans-serif;\n            background: #0f172a;\n            color: #f8fafc;\n            padding: 20px;\n        }\n        .container {\n            color: #38bdf8;\n            font-size: 18px;\n        }\n    </style>\n</head>\n<body>\n    <div class="container">Hello World</div>\n</body>\n</html>`,
 };
 
 function changeLanguageTemplate(questionId, lang, examId) {
@@ -1213,8 +1211,8 @@ async function runStudentCode(questionId, examId, runTestCases = false) {
 
   if (runBtn) runBtn.disabled = true;
   if (runTestsBtn) runTestsBtn.disabled = true;
-  if (statusBadge) statusBadge.innerHTML = '<span style="color:var(--color-warning);"><i class="ph ph-spinner" style="animation:spin 1s linear infinite;"></i> Running...</span>';
-  if (terminal) terminal.textContent = 'Executing code in secure sandbox...';
+  if (statusBadge) statusBadge.innerHTML = '';
+  if (terminal) terminal.textContent = 'Running code...';
 
   try {
     const data = await api('/api/student/run-code', {
@@ -1229,14 +1227,9 @@ async function runStudentCode(questionId, examId, runTestCases = false) {
     });
 
     if (data.mode === 'test_cases') {
-      if (statusBadge) {
-        statusBadge.innerHTML = data.allPassed
-          ? `<span style="color:var(--color-success); font-weight:700;"><i class="ph ph-check-circle"></i> All ${data.passedCount}/${data.totalCount} Test Cases Passed</span>`
-          : `<span style="color:var(--color-danger); font-weight:700;"><i class="ph ph-x-circle"></i> ${data.passedCount}/${data.totalCount} Test Cases Passed</span>`;
-      }
-
+      if (statusBadge) statusBadge.innerHTML = '';
       if (terminal) {
-        terminal.textContent = `Test Suite Execution Complete:\nPassed: ${data.passedCount}/${data.totalCount}\nStatus: ${data.allPassed ? 'ALL TESTS PASSED ✓' : 'SOME TESTS FAILED ✗'}`;
+        terminal.textContent = `Test Suite Execution Complete:\nPassed: ${data.passedCount}/${data.totalCount}`;
       }
 
       if (testResultsContainer) {
@@ -1248,13 +1241,13 @@ async function runStudentCode(questionId, examId, runTestCases = false) {
               <div class="test-case-item ${r.passed ? 'pass' : 'fail'}">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                   <span style="font-weight:700; color:#f0f6fc;">Test Case #${r.caseNumber}</span>
-                  <span class="badge ${r.passed ? 'badge-success' : 'badge-danger'}" style="font-size:0.75rem;">${r.passed ? '✓ PASSED' : '✗ FAILED'} (${r.duration_ms}ms)</span>
+                  <span style="font-size:0.75rem; color:#8b949e;">(${r.duration_ms}ms)</span>
                 </div>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-family:monospace; font-size:0.8rem; margin-top:4px;">
                   <div><span style="color:#8b949e;">Input:</span> <span style="color:#f0f6fc;">${escapeHtml(r.input)}</span></div>
                   <div><span style="color:#8b949e;">Expected:</span> <span style="color:#34d399;">${escapeHtml(r.expected)}</span></div>
-                  <div style="grid-column: 1 / -1;"><span style="color:#8b949e;">Your Output:</span> <span style="color:${r.passed ? '#34d399' : '#f43f5e'};">${escapeHtml(r.actual || '(no output)')}</span></div>
-                  ${r.stderr ? `<div style="grid-column: 1 / -1; color:#f43f5e;"><span style="color:#8b949e;">Error:</span> ${escapeHtml(r.stderr)}</div>` : ''}
+                  <div style="grid-column: 1 / -1;"><span style="color:#8b949e;">Your Output:</span> <span style="color:#f0f6fc;">${escapeHtml(r.actual || '(no output)')}</span></div>
+                  ${r.stderr ? `<div style="grid-column: 1 / -1; color:#f43f5e;"><span style="color:#8b949e;">Output:</span> ${escapeHtml(r.stderr)}</div>` : ''}
                 </div>
               </div>
             `).join('')}
@@ -1263,25 +1256,16 @@ async function runStudentCode(questionId, examId, runTestCases = false) {
       }
     } else {
       if (testResultsContainer) testResultsContainer.style.display = 'none';
-
-      if (statusBadge) {
-        if (data.status === 'success') {
-          statusBadge.innerHTML = `<span style="color:var(--color-success); font-weight:700;"><i class="ph ph-check-circle"></i> Success (${data.duration_ms}ms)</span>`;
-        } else if (data.status === 'timeout') {
-          statusBadge.innerHTML = `<span style="color:var(--color-danger); font-weight:700;"><i class="ph ph-clock-countdown"></i> Timeout (${data.duration_ms}ms)</span>`;
-        } else {
-          statusBadge.innerHTML = `<span style="color:var(--color-danger); font-weight:700;"><i class="ph ph-x-circle"></i> Error (${data.duration_ms}ms)</span>`;
-        }
-      }
+      if (statusBadge) statusBadge.innerHTML = '';
 
       if (terminal) {
         let out = '';
         if (data.stdout) out += data.stdout;
         if (data.stderr) {
           if (out) out += '\n\n';
-          out += `[STDERR / TRACEBACK]\n${data.stderr}`;
+          out += data.stderr;
         }
-        if (!out) out = '(Program executed successfully with no console output)';
+        if (!out) out = '(No console output)';
         terminal.textContent = out;
       }
     }

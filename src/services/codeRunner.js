@@ -1,8 +1,8 @@
 /**
  * codeRunner.js — Safe Execution Service for Programming Questions (Vercel & Local)
  * ══════════════════════════════════════════════════════════════════════════════════
- * Executes student solution code across 6 languages:
- * C, C++, Python, HTML, CSS, JavaScript (Node.js)
+ * Executes student solution code across 5 programming choices:
+ * C, C++, Python 3, HTML & CSS, JavaScript (Node.js)
  * Handles both local native execution and safe serverless VM fallback (Vercel).
  */
 
@@ -25,9 +25,7 @@ const LANGUAGE_STARTERS = {
 
   cpp: `#include <iostream>\n#include <string>\nusing namespace std;\n\nvoid solution() {\n    string input;\n    if (cin >> input) {\n        cout << input << endl;\n    }\n}\n\nint main() {\n    solution();\n    return 0;\n}`,
 
-  html: `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>Solution</title>\n</head>\n<body>\n    <div id="output">Hello World</div>\n</body>\n</html>`,
-
-  css: `.container {\n    display: flex;\n    justify-content: center;\n    align-items: center;\n    color: #6366f1;\n    font-family: sans-serif;\n}`,
+  html_css: `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>HTML & CSS Solution</title>\n    <style>\n        body {\n            font-family: sans-serif;\n            background: #0f172a;\n            color: #f8fafc;\n            padding: 20px;\n        }\n        .container {\n            color: #38bdf8;\n            font-size: 18px;\n        }\n    </style>\n</head>\n<body>\n    <div class="container">Hello World</div>\n</body>\n</html>`,
 };
 
 /**
@@ -40,13 +38,11 @@ function detectLanguage(code, explicitLanguage) {
     if (lang === 'cpp' || lang === 'c++') return 'cpp';
     if (lang.includes('py')) return 'python';
     if (lang.includes('js') || lang.includes('node') || lang.includes('javascript')) return 'javascript';
-    if (lang.includes('html')) return 'html';
-    if (lang.includes('css')) return 'css';
+    if (lang.includes('html') || lang.includes('css')) return 'html_css';
   }
 
   const s = String(code || '');
-  if (/^\s*<!DOCTYPE html>|^\s*<html\b|^\s*<body\b/i.test(s)) return 'html';
-  if (/^\s*[.#]?[\w-]+\s*\{[^}]*\}/m.test(s) && !s.includes('function') && !s.includes('def ')) return 'css';
+  if (/^\s*<!DOCTYPE html>|^\s*<html\b|^\s*<body\b|<style\b/i.test(s)) return 'html_css';
   if (/#include\s*<iostream>|std::cout|using namespace std/.test(s)) return 'cpp';
   if (/#include\s*<stdio\.h>|printf\b|scanf\b/.test(s)) return 'c';
   if (/^\s*(def |import |from |print\b|class \w+:|elif |if __name__)/m.test(s)) return 'python';
@@ -169,18 +165,17 @@ function executePythonInVm(code, input = '', timeout = DEFAULT_TIMEOUT_MS) {
 /**
  * C / C++ VM fallback execution
  */
-function executeCppInVm(code, input = '', timeout = DEFAULT_TIMEOUT_MS, isC = false) {
+function executeCppInVm(code, input = '', timeout = DEFAULT_TIMEOUT_MS) {
   const startTime = Date.now();
   let stdout = '';
   let stderr = '';
   const cleanInput = String(input || '').trim();
 
-  // Simple C/C++ output simulator
   const printfMatches = code.match(/printf\s*\(\s*"([^"]+)"\s*(?:,\s*([^)]+))?\)/g) || [];
   const coutMatches = code.match(/cout\s*<<\s*([^;]+);/g) || [];
 
   if (cleanInput) {
-    stdout += cleanInput + '\n';
+    stdout += cleanInput;
   } else if (printfMatches.length > 0 || coutMatches.length > 0) {
     printfMatches.forEach(m => {
       const match = m.match(/printf\s*\(\s*"([^"]+)"/);
@@ -190,8 +185,6 @@ function executeCppInVm(code, input = '', timeout = DEFAULT_TIMEOUT_MS, isC = fa
       const textMatch = m.match(/"([^"]+)"/);
       if (textMatch && textMatch[1]) stdout += textMatch[1] + '\n';
     });
-  } else {
-    stdout += 'Execution completed successfully.';
   }
 
   return {
@@ -204,32 +197,18 @@ function executeCppInVm(code, input = '', timeout = DEFAULT_TIMEOUT_MS, isC = fa
 }
 
 /**
- * HTML / CSS Evaluator
+ * HTML & CSS Evaluator - Outputs raw source code output directly
  */
-function executeHtmlCss(code, language) {
+function executeHtmlCss(code) {
   const startTime = Date.now();
   const src = String(code || '').trim();
-
-  if (language === 'html') {
-    const hasHtmlTag = /<html\b/i.test(src) || /<div\b|<body\b|<p\b/i.test(src);
-    return {
-      stdout: hasHtmlTag ? `HTML5 Validation Passed:\n${src}` : `HTML Snippet Rendered:\n<div>${src}</div>`,
-      stderr: '',
-      exitCode: 0,
-      duration_ms: Date.now() - startTime,
-      status: 'success',
-    };
-  } else {
-    // CSS
-    const rules = (src.match(/[.#]?[\w-]+\s*\{[^}]*\}/g) || []).length;
-    return {
-      stdout: `CSS3 Validation Passed (${rules} style rules compiled successfully):\n${src}`,
-      stderr: '',
-      exitCode: 0,
-      duration_ms: Date.now() - startTime,
-      status: 'success',
-    };
-  }
+  return {
+    stdout: src,
+    stderr: '',
+    exitCode: 0,
+    duration_ms: Date.now() - startTime,
+    status: 'success',
+  };
 }
 
 /**
@@ -242,12 +221,12 @@ async function executeCode({ code, language = 'python', input = '', timeout = DE
     return executeJavaScriptInVm(code, input, timeout);
   }
 
-  if (lang === 'html' || lang === 'css') {
-    return executeHtmlCss(code, lang);
+  if (lang === 'html_css') {
+    return executeHtmlCss(code);
   }
 
   if (lang === 'c' || lang === 'cpp') {
-    return executeCppInVm(code, input, timeout, lang === 'c');
+    return executeCppInVm(code, input, timeout);
   }
 
   // Python execution

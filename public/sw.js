@@ -3,16 +3,16 @@
  * Processed by scripts/build.js into public/sw.js with asset manifests & versioning.
  */
 
-const CACHE_NAME = 'cas-cache-a2d528c9';
+const CACHE_NAME = 'cas-cache-65dff040';
 
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/css/styles.css',
   '/dist/manifest.json',
-    '/dist/core.e418b2f1.js',
+    '/dist/core.d157963c.js',
   '/dist/admin.fcbc53e6.js',
-  '/dist/student.12452c73.js',
+  '/dist/student.b50a5e6a.js',
   '/dist/evaluator.02b40dbb.js',
 ];
 

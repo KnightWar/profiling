@@ -251,6 +251,91 @@ async function loadRoleModule(role) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// FULLSCREEN & NOTIFICATION SECURITY (Student Exam Mode)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function enterFullscreen() {
+  try {
+    const docEl = document.documentElement;
+    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+    if (!isFullscreen) {
+      if (docEl.requestFullscreen) {
+        docEl.requestFullscreen().catch(err => console.warn('Fullscreen request rejected:', err));
+      } else if (docEl.webkitRequestFullscreen) {
+        docEl.webkitRequestFullscreen();
+      } else if (docEl.mozRequestFullScreen) {
+        docEl.mozRequestFullScreen();
+      } else if (docEl.msRequestFullscreen) {
+        docEl.msRequestFullscreen();
+      }
+    }
+  } catch (err) {
+    console.warn('enterFullscreen error:', err);
+  }
+}
+
+function disableIncomingNotifications() {
+  try {
+    if (typeof window !== 'undefined') {
+      // 1. Close active notifications in registered service workers
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          registrations.forEach(reg => {
+            if (reg.getNotifications) {
+              reg.getNotifications().then(notifications => {
+                notifications.forEach(n => n.close());
+              }).catch(() => {});
+            }
+            if (reg.pushManager) {
+              reg.pushManager.getSubscription().then(sub => {
+                if (sub) sub.unsubscribe().catch(() => {});
+              }).catch(() => {});
+            }
+          });
+        }).catch(() => {});
+      }
+
+      // 2. Override window.Notification API
+      if ('Notification' in window) {
+        if (!window._originalNotification) {
+          window._originalNotification = window.Notification;
+        }
+        try {
+          const DisabledNotification = function() {
+            console.warn('Incoming notifications are disabled during student exam sessions.');
+          };
+          DisabledNotification.permission = 'denied';
+          DisabledNotification.requestPermission = function() {
+            return Promise.resolve('denied');
+          };
+          DisabledNotification.maxActions = 0;
+          window.Notification = DisabledNotification;
+        } catch (e) {
+          try {
+            Object.defineProperty(window, 'Notification', {
+              get() {
+                return class MockNotification {
+                  static get permission() { return 'denied'; }
+                  static requestPermission() { return Promise.resolve('denied'); }
+                  constructor() { console.warn('Notifications disabled'); }
+                  close() {}
+                };
+              },
+              configurable: true
+            });
+          } catch (e2) {}
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('disableIncomingNotifications error:', err);
+  }
+}
+
+window.enterFullscreen = enterFullscreen;
+window.disableIncomingNotifications = disableIncomingNotifications;
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -329,6 +414,20 @@ function showApp() {
   document.getElementById('user-role').textContent = App.user.role.charAt(0).toUpperCase() + App.user.role.slice(1);
   document.getElementById('user-avatar').textContent = App.user.name.charAt(0).toUpperCase();
 
+  // Enforce fullscreen & notification restrictions for students
+  if (App.user && App.user.role === 'student') {
+    enterFullscreen();
+    disableIncomingNotifications();
+
+    const ensureFs = () => {
+      enterFullscreen();
+      document.removeEventListener('click', ensureFs);
+      document.removeEventListener('keydown', ensureFs);
+    };
+    document.addEventListener('click', ensureFs, { once: true });
+    document.addEventListener('keydown', ensureFs, { once: true });
+  }
+
   buildNav();
   handleRoute();
 }
@@ -338,6 +437,10 @@ async function handleAccessCodeLogin(e) {
   const btn = document.getElementById('access-code-btn');
   const errEl = document.getElementById('access-code-error');
   errEl.style.display = 'none';
+
+  // Request fullscreen immediately inside the user click/submit gesture
+  enterFullscreen();
+  disableIncomingNotifications();
 
   try {
     if (!isGoogleChrome()) {

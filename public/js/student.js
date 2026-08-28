@@ -25,6 +25,9 @@ ROUTES['#/student/exam']      = renderStudentExam;
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function renderStudentDashboard(isBackground = false) {
+  if (typeof enterFullscreen === 'function') enterFullscreen();
+  if (typeof disableIncomingNotifications === 'function') disableIncomingNotifications();
+
   const main = document.getElementById('main-content');
   const cacheKey = '#/student/dashboard';
 

@@ -141,9 +141,18 @@ router.post('/students', async (req, res) => {
       'INSERT INTO users (name, email, password_hash, role, roll_no, phone) VALUES (?, ?, ?, ?, ?, ?)'
     ).run(name.trim(), cleanEmail, hash, 'student', cleanRoll, phone || null);
 
+    const studentId = result.lastInsertRowid;
+    if (req.body.batch_id) {
+      try {
+        await db.prepare('INSERT OR IGNORE INTO batch_students (batch_id, student_id) VALUES (?, ?)').run(req.body.batch_id, studentId);
+      } catch (batchErr) {
+        console.warn('Batch student insert error:', batchErr);
+      }
+    }
+
     res.status(201).json({
       message: 'Student created',
-      student: { id: result.lastInsertRowid, name: name.trim(), email: cleanEmail, roll_no: cleanRoll },
+      student: { id: studentId, name: name.trim(), email: cleanEmail, roll_no: cleanRoll },
     });
   } catch (err) {
     console.error('Create student error:', err);

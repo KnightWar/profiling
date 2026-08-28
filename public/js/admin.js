@@ -181,9 +181,12 @@ async function patchAdminDashboardStats() {
 // ADMIN: STUDENT MANAGER
 // ═══════════════════════════════════════════════════════════════════════════════
 
+let currentStudentManagerBatchFilter = '';
+let currentStudentManagerSearch = '';
+
 async function renderStudentManager(isBackground = false) {
   const main = document.getElementById('main-content');
-  const cacheKey = '#/admin/students';
+  const cacheKey = `#/admin/students?batch=${currentStudentManagerBatchFilter}&q=${currentStudentManagerSearch}`;
 
   if (!isBackground && App.sectionCache[cacheKey]) {
     main.innerHTML = App.sectionCache[cacheKey];
@@ -196,18 +199,28 @@ async function renderStudentManager(isBackground = false) {
   }
 
   try {
+    let studentsUrl = '/api/admin/students?limit=100';
+    if (currentStudentManagerBatchFilter) studentsUrl += `&batch_id=${currentStudentManagerBatchFilter}`;
+    if (currentStudentManagerSearch) studentsUrl += `&search=${encodeURIComponent(currentStudentManagerSearch)}`;
+
     const [data, batchesData] = await Promise.all([
-      api('/api/admin/students'),
+      api(studentsUrl),
       api('/api/admin/batches')
     ]);
 
-    const batchOptions = batchesData.batches.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
+    const batchesList = batchesData?.batches || [];
+    const selectedBatch = batchesList.find(b => String(b.id) === String(currentStudentManagerBatchFilter));
+    const batchOptions = batchesList.map(b => `
+      <option value="${b.id}" ${String(currentStudentManagerBatchFilter) === String(b.id) ? 'selected' : ''}>
+        🏷️ ${escapeHtml(b.name)}
+      </option>
+    `).join('');
 
     const html = `
       <div class="page-header">
         <div>
           <h1><i class="ph ph-users"></i> Student Manager</h1>
-          <p class="page-subtitle">${data.total} students total</p>
+          <p class="page-subtitle" id="student-manager-subtitle">${data.total || 0} students ${selectedBatch ? `in Batch: <strong style="color:var(--accent-light);">${escapeHtml(selectedBatch.name)}</strong>` : 'total'}</p>
         </div>
         <div class="btn-group">
           <button class="btn btn-outline" onclick="openBatchManagerModal()"><i class="ph ph-users"></i> Manage Batches</button>
@@ -218,13 +231,13 @@ async function renderStudentManager(isBackground = false) {
 
       <div class="card">
         <div class="card-header" style="flex-direction: column; align-items: stretch; gap: 1rem;">
-          <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
-            <div class="search-bar" style="flex:1;">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+            <div class="search-bar" style="flex:1; min-width:240px;">
               <span class="search-icon"><i class="ph ph-magnifying-glass"></i></span>
-              <input type="text" class="form-input" id="student-search" placeholder="Search students by name, email or roll no..." oninput="fetchFilteredStudents()">
+              <input type="text" class="form-input" id="student-search" value="${escapeHtml(currentStudentManagerSearch)}" placeholder="Search students by name, email or roll no..." oninput="fetchFilteredStudents()">
             </div>
-            <select class="form-select" id="student-batch-filter" onchange="fetchFilteredStudents()" style="max-width: 250px;">
-              <option value="">All Batches</option>
+            <select class="form-select" id="student-batch-filter" onchange="fetchFilteredStudents()" style="min-width: 220px; font-weight:600;">
+              <option value="" ${currentStudentManagerBatchFilter === '' ? 'selected' : ''}>👥 All Batches</option>
               ${batchOptions}
             </select>
           </div>
@@ -241,37 +254,48 @@ async function renderStudentManager(isBackground = false) {
           </div>
         </div>
 
-        <div class="table-container" style="border:none;">
-          <table class="data-table">
+        <div class="table-container" style="border:none; min-height:250px;">
+          <table class="data-table" style="table-layout:fixed; width:100%;">
             <thead>
               <tr>
-                <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllStudents" onchange="toggleAllStudents(this)"></th>
-                <th>Name</th><th>Reg / Roll No</th><th>Composite Score</th>
-                <th>Batches</th><th>Level</th><th>Status</th><th>Login</th><th>Actions</th>
+                <th style="width: 44px; text-align: center;"><input type="checkbox" id="selectAllStudents" onchange="toggleAllStudents(this)"></th>
+                <th style="width: 22%;">Name</th>
+                <th style="width: 16%;">Reg / Roll No</th>
+                <th style="width: 14%;">Composite Score</th>
+                <th style="width: 16%;">Batches</th>
+                <th style="width: 12%;">Level</th>
+                <th style="width: 10%;">Status</th>
+                <th style="width: 10%;">Login</th>
+                <th style="width: 80px; text-align:right;">Actions</th>
               </tr>
             </thead>
             <tbody id="students-tbody">
               ${data.students.map((s, idx) => `
-                <tr class="animate-slide-up" style="animation-delay: ${idx * 0.05}s">
+                <tr style="height: 52px;">
                   <td style="text-align: center;"><input type="checkbox" class="student-checkbox" value="${s.id}" onchange="updateBulkActionBar()"></td>
-                  <td style="font-weight:600; color:var(--text-primary);">${escapeHtml(s.name)}</td>
+                  <td style="font-weight:600; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(s.name)}</td>
                   <td><code style="background:rgba(99,102,241,0.12); padding:3px 8px; border-radius:6px; font-weight:700; color:var(--accent-indigo-light); font-family:monospace;">${escapeHtml(s.roll_no || '—')}</code></td>
-                  <td>${s.total_score !== null ? `<span class="font-mono">${s.total_score}/5000</span>` : '—'}</td>
-                  <td><span class="badge badge-neutral" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle;" title="${escapeHtml(s.batches || 'None')}">${escapeHtml(s.batches || 'None')}</span></td>
+                  <td>${s.total_score !== null ? `<span class="font-mono" style="font-weight:700;">${s.total_score} <span style="font-size:0.75rem; color:var(--text-muted);">/ 5000</span></span>` : '—'}</td>
+                  <td>
+                    ${s.batches 
+                      ? `<span class="badge badge-primary" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle;" title="${escapeHtml(s.batches)}">${escapeHtml(s.batches)}</span>`
+                      : `<span class="badge" style="background:rgba(148,163,184,0.15); color:#94a3b8; font-size:0.75rem;">Unassigned</span>`
+                    }
+                  </td>
                   <td>${s.level ? levelBadge(s.level) : '<span class="badge badge-neutral">Pending</span>'}</td>
                   <td>${s.active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-danger">Inactive</span>'}</td>
                   <td style="cursor: pointer;" onclick="toggleSingleAuthorization(${s.id}, ${!s.login_authorized})">
                     ${s.login_authorized ? '<span class="badge badge-success" title="Click to Revoke"><i class="ph ph-lock-open"></i> Allowed</span>' : '<span class="badge badge-danger" title="Click to Authorize"><i class="ph ph-lock-key"></i> Locked</span>'}
                   </td>
-                  <td>
-                    <div class="btn-group">
+                  <td style="text-align:right;">
+                    <div class="btn-group" style="justify-content:flex-end;">
                       <button class="btn btn-action btn-sm" onclick="editStudent(${s.id})" title="Reset Exams"><i class="ph ph-arrows-clockwise"></i></button>
                       <button class="btn btn-action btn-sm" onclick="deleteStudent(${s.id}, '${escapeHtml(s.name)}')" title="Deactivate"><i class="ph ph-trash"></i></button>
                     </div>
                   </td>
                 </tr>
               `).join('')}
-              ${data.students.length === 0 ? '<tr><td colspan="9" class="text-center text-muted" style="padding:32px;">No students yet. Click "Add Student" or "Bulk Import" to get started.</td></tr>' : ''}
+              ${data.students.length === 0 ? '<tr><td colspan="9" class="text-center text-muted" style="padding:32px;">No students found in this batch. Click "Add Student" or "Bulk Import" to get started.</td></tr>' : ''}
             </tbody>
           </table>
         </div>
@@ -290,30 +314,46 @@ async function fetchFilteredStudents() {
   clearTimeout(filterTimeout);
   filterTimeout = setTimeout(async () => {
     try {
-      const search  = document.getElementById('student-search').value;
-      const batchId = document.getElementById('student-batch-filter').value;
+      const searchInput  = document.getElementById('student-search');
+      const batchSelect  = document.getElementById('student-batch-filter');
+      const search  = searchInput ? searchInput.value.trim() : '';
+      const batchId = batchSelect ? batchSelect.value : '';
 
-      let url = `/api/admin/students?search=${encodeURIComponent(search)}`;
+      currentStudentManagerSearch = search;
+      currentStudentManagerBatchFilter = batchId;
+
+      let url = `/api/admin/students?limit=100&search=${encodeURIComponent(search)}`;
       if (batchId) url += `&batch_id=${batchId}`;
 
       const data = await api(url);
       const tbody = document.getElementById('students-tbody');
       if (!tbody) return;
 
-      tbody.innerHTML = data.students.map((s, idx) => `
-        <tr class="animate-slide-up" style="animation-delay: ${idx * 0.05}s">
+      const subtitleEl = document.getElementById('student-manager-subtitle');
+      if (subtitleEl && batchSelect) {
+        const selectedText = batchSelect.options[batchSelect.selectedIndex]?.text || '';
+        subtitleEl.innerHTML = `${data.total || 0} students ${batchId ? `in Batch: <strong style="color:var(--accent-light);">${escapeHtml(selectedText.replace('🏷️ ', ''))}</strong>` : 'total'}`;
+      }
+
+      tbody.innerHTML = data.students.map((s) => `
+        <tr style="height: 52px;">
           <td style="text-align: center;"><input type="checkbox" class="student-checkbox" value="${s.id}" onchange="updateBulkActionBar()"></td>
-          <td style="font-weight:600; color:var(--text-primary);">${escapeHtml(s.name)}</td>
+          <td style="font-weight:600; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(s.name)}</td>
           <td><code style="background:rgba(99,102,241,0.12); padding:3px 8px; border-radius:6px; font-weight:700; color:var(--accent-indigo-light); font-family:monospace;">${escapeHtml(s.roll_no || '—')}</code></td>
-          <td>${s.total_score !== null ? `<span class="font-mono">${s.total_score}/5000</span>` : '—'}</td>
-          <td><span class="badge badge-neutral" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle;" title="${escapeHtml(s.batches || 'None')}">${escapeHtml(s.batches || 'None')}</span></td>
+          <td>${s.total_score !== null ? `<span class="font-mono" style="font-weight:700;">${s.total_score} <span style="font-size:0.75rem; color:var(--text-muted);">/ 5000</span></span>` : '—'}</td>
+          <td>
+            ${s.batches 
+              ? `<span class="badge badge-primary" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle;" title="${escapeHtml(s.batches)}">${escapeHtml(s.batches)}</span>`
+              : `<span class="badge" style="background:rgba(148,163,184,0.15); color:#94a3b8; font-size:0.75rem;">Unassigned</span>`
+            }
+          </td>
           <td>${s.level ? levelBadge(s.level) : '<span class="badge badge-neutral">Pending</span>'}</td>
           <td>${s.active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-danger">Inactive</span>'}</td>
           <td style="cursor: pointer;" onclick="toggleSingleAuthorization(${s.id}, ${!s.login_authorized})">
             ${s.login_authorized ? '<span class="badge badge-success" title="Click to Revoke"><i class="ph ph-lock-open"></i> Allowed</span>' : '<span class="badge badge-danger" title="Click to Authorize"><i class="ph ph-lock-key"></i> Locked</span>'}
           </td>
-          <td>
-            <div class="btn-group">
+          <td style="text-align:right;">
+            <div class="btn-group" style="justify-content:flex-end;">
               <button class="btn btn-action btn-sm" onclick="editStudent(${s.id})" title="Reset Exams"><i class="ph ph-arrows-clockwise"></i></button>
               <button class="btn btn-action btn-sm" onclick="deleteStudent(${s.id}, '${escapeHtml(s.name)}')" title="Deactivate"><i class="ph ph-trash"></i></button>
             </div>
@@ -322,40 +362,62 @@ async function fetchFilteredStudents() {
       `).join('');
 
       if (data.students.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding:32px;">No students found matching your criteria.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding:32px;">No students found matching your criteria in this batch.</td></tr>';
       }
+      updateBulkActionBar();
     } catch (err) {
       showToast('Search failed', 'error');
     }
-  }, 300);
+  }, 250);
 }
 
-function openAddStudentModal() {
-  openModal('Add Student', `
-    <form id="add-student-form">
-      <div class="form-group">
-        <label class="form-label">Student Name *</label>
-        <input type="text" class="form-input" id="new-student-name" placeholder="e.g. Alice Johnson" required>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Registration / Roll Number *</label>
-        <input type="text" class="form-input" id="new-student-roll" placeholder="e.g. REG001 or STU001" required>
-      </div>
-    </form>
-  `, `
-    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" onclick="submitAddStudent()">Add Student</button>
-  `);
+async function openAddStudentModal() {
+  try {
+    const data = await api('/api/admin/batches');
+    const batches = data?.batches || [];
+    let batchOptions = `<option value="">-- No Batch (Unassigned) --</option>`;
+    batches.forEach(b => {
+      const isSel = String(currentStudentManagerBatchFilter) === String(b.id) ? 'selected' : '';
+      batchOptions += `<option value="${b.id}" ${isSel}>🏷️ ${escapeHtml(b.name)}</option>`;
+    });
+
+    openModal('Add Student', `
+      <form id="add-student-form">
+        <div class="form-group">
+          <label class="form-label">Student Name *</label>
+          <input type="text" class="form-input" id="new-student-name" placeholder="e.g. Alice Johnson" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Registration / Roll Number *</label>
+          <input type="text" class="form-input" id="new-student-roll" placeholder="e.g. REG001 or STU001" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Assign to Batch</label>
+          <select id="new-student-batch" class="form-select">${batchOptions}</select>
+        </div>
+      </form>
+    `, `
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitAddStudent()">Add Student</button>
+    `);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 async function submitAddStudent() {
   try {
+    const name = document.getElementById('new-student-name').value.trim();
+    const roll_no = document.getElementById('new-student-roll').value.trim();
+    const batch_id = document.getElementById('new-student-batch')?.value || null;
+
+    if (!name || !roll_no) {
+      return showToast('Name and Roll Number are required', 'warning');
+    }
+
     await api('/api/admin/students', {
       method: 'POST',
-      body: {
-        name:    document.getElementById('new-student-name').value,
-        roll_no: document.getElementById('new-student-roll').value,
-      },
+      body: { name, roll_no, batch_id },
     });
     closeModal();
     showToast('Student added successfully', 'success');
@@ -369,7 +431,10 @@ async function openBulkImportModal() {
   try {
     const data = await api('/api/admin/batches');
     let batchOptions = '<option value="">-- No Batch (Unassigned) --</option>';
-    data.batches.forEach(b => { batchOptions += `<option value="${b.id}">${b.name}</option>`; });
+    (data.batches || []).forEach(b => {
+      const isSel = String(currentStudentManagerBatchFilter) === String(b.id) ? 'selected' : '';
+      batchOptions += `<option value="${b.id}" ${isSel}>🏷️ ${escapeHtml(b.name)}</option>`;
+    });
 
     openModal('Bulk Import Students', `
       <p class="text-sm text-muted mb-sm">Upload an Excel (.xlsx) or CSV (.csv) file with columns: <strong>name, reg_no</strong></p>

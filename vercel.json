@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "npm run build",
   "rewrites": [
     {
       "source": "/api/:path*",
@@ -7,7 +8,7 @@
     },
     {
       "source": "/((?!api/).*)",
-      "destination": "/$1"
+      "destination": "/public/$1"
     }
   ]
 }

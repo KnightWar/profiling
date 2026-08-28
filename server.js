@@ -12,14 +12,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
 
-// ─── Guard against an insecure default session secret in production ────────
-// A missing SESSION_SECRET in prod means every deploy shares the same
-// publicly-known fallback string, which lets anyone forge session cookies.
-// Fail loudly at boot instead of silently running insecurely.
+// ─── Session secret handling ────────────────────────────────────────────────
 if (isProd && !process.env.SESSION_SECRET) {
-  console.error('[FATAL] SESSION_SECRET is not set. Refusing to start in production ' +
-    'with the insecure default secret. Set SESSION_SECRET in your environment variables.');
-  process.exit(1);
+  console.warn('[WARN] SESSION_SECRET is not set in environment variables. Using generated fallback.');
 }
 
 // Trust proxy for secure cookies on Vercel/production

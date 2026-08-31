@@ -369,8 +369,14 @@ function buildQuestionCard(examId) {
         placeholder="Write your clean solution code here..."
         oninput="autoSaveResponse(${q.id}, this.value, ${examId})"
         onpaste="return false;" oncopy="return false;" oncut="return false;"
-        spellcheck="false" autocomplete="off" autocorrect="off"
-        data-gramm="false" data-lt-active="false" data-dashlane-rm="true"
+        spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+        writingsuggestions="false"
+        data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false" gramm="false"
+        data-lt-active="false" data-lt-extension="false" data-lt-prevent-focus="true"
+        data-quillbot="false" data-quillbot-installed="false"
+        data-compose="false" data-ms-editor="false"
+        data-ai="false" data-ai-assist="false" data-no-ai="true"
+        data-dashlane-rm="true" data-1p-ignore="true" data-lpignore="true" data-form-type="other"
         style="width: 100%; border: none; background: transparent; color: #f0f6fc; font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; font-size: 0.92rem; line-height: 1.6; padding: 14px 16px; tab-size: 4; resize: vertical; outline: none; white-space: pre;"
       >${escapeHtml(currentAnswer || `def solution(input_data):\n    # Write your solution logic here\n    return input_data\n\nif __name__ == '__main__':\n    import sys\n    input_str = sys.stdin.read().strip()\n    result = solution(input_str)\n    if result is not None:\n        print(result)`)}</textarea>
     </div>
@@ -413,11 +419,11 @@ function buildQuestionCard(examId) {
             <div style="display:flex; flex-direction:column; gap:10px;">
               <div>
                 <label style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#8b949e; display:block; margin-bottom:4px;">Sample / Custom Input (stdin)</label>
-                <textarea id="code-input-stdin" rows="3" class="form-textarea" placeholder="Input passed to standard input..." style="width:100%; font-family:monospace; font-size:0.85rem; background:#010409; border:1px solid #30363d; color:#f0f6fc; resize:vertical;">${escapeHtml(q.test_cases && q.test_cases[0] ? (typeof q.test_cases[0].input === 'object' ? JSON.stringify(q.test_cases[0].input) : String(q.test_cases[0].input || '')) : '')}</textarea>
+                <textarea id="code-input-stdin" rows="3" class="form-textarea" placeholder="Input passed to standard input..." spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" writingsuggestions="false" data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false" gramm="false" data-lt-active="false" data-lt-extension="false" data-quillbot="false" data-compose="false" data-ms-editor="false" data-ai="false" data-no-ai="true" style="width:100%; font-family:monospace; font-size:0.85rem; background:#010409; border:1px solid #30363d; color:#f0f6fc; resize:vertical;">${escapeHtml(q.test_cases && q.test_cases[0] ? (typeof q.test_cases[0].input === 'object' ? JSON.stringify(q.test_cases[0].input) : String(q.test_cases[0].input || '')) : '')}</textarea>
               </div>
               <div>
                 <label style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#8b949e; display:block; margin-bottom:4px;">Expected Output (optional verification)</label>
-                <textarea id="code-expected-output" rows="2" class="form-textarea" placeholder="Expected result to compare against..." style="width:100%; font-family:monospace; font-size:0.85rem; background:#010409; border:1px solid #30363d; color:#f0f6fc; resize:vertical;">${escapeHtml(q.test_cases && q.test_cases[0] ? (typeof q.test_cases[0].expected === 'object' ? JSON.stringify(q.test_cases[0].expected) : String(q.test_cases[0].expected || '')) : '')}</textarea>
+                <textarea id="code-expected-output" rows="2" class="form-textarea" placeholder="Expected result to compare against..." spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" writingsuggestions="false" data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false" gramm="false" data-lt-active="false" data-lt-extension="false" data-quillbot="false" data-compose="false" data-ms-editor="false" data-ai="false" data-no-ai="true" style="width:100%; font-family:monospace; font-size:0.85rem; background:#010409; border:1px solid #30363d; color:#f0f6fc; resize:vertical;">${escapeHtml(q.test_cases && q.test_cases[0] ? (typeof q.test_cases[0].expected === 'object' ? JSON.stringify(q.test_cases[0].expected) : String(q.test_cases[0].expected || '')) : '')}</textarea>
               </div>
             </div>
           </div>
@@ -437,8 +443,14 @@ function buildQuestionCard(examId) {
     <textarea class="form-textarea" id="answer-input" rows="6"
       placeholder="Type your answer here..."
       oninput="autoSaveResponse(${q.id}, this.value, ${examId})"
-      spellcheck="false" autocomplete="off" autocorrect="off"
-      data-gramm="false" data-lt-active="false" data-dashlane-rm="true"
+      spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+      writingsuggestions="false"
+      data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false" gramm="false"
+      data-lt-active="false" data-lt-extension="false" data-lt-prevent-focus="true"
+      data-quillbot="false" data-quillbot-installed="false"
+      data-compose="false" data-ms-editor="false"
+      data-ai="false" data-ai-assist="false" data-no-ai="true"
+      data-dashlane-rm="true" data-1p-ignore="true" data-lpignore="true" data-form-type="other"
       style="font-size: 0.95rem; line-height: 1.5;"
     >${escapeHtml(currentAnswer)}</textarea>
   `;
@@ -494,7 +506,12 @@ function patchQuestionNav(examId) {
 /** Rebuilds only the question card content (question text + answer input). */
 function patchExamQuestion(examId) {
   const card = document.getElementById('question-card');
-  if (card) card.innerHTML = buildQuestionCard(examId);
+  if (card) {
+    card.innerHTML = buildQuestionCard(examId);
+    if (typeof sanitizeAndProtectStudentInputs === 'function') {
+      sanitizeAndProtectStudentInputs(card);
+    }
+  }
 
   const navBtns = document.getElementById('exam-nav-btns');
   if (navBtns) navBtns.innerHTML = buildNavButtons(examId);
@@ -770,6 +787,29 @@ function setupProctoring(examId) {
   // Suppress browser notifications during exam
   suppressNotifications();
 
+  // Active Extension Blocker MutationObserver to clean up any extension injects
+  if (examState.extensionObserver) {
+    try { examState.extensionObserver.disconnect(); } catch {}
+    examState.extensionObserver = null;
+  }
+  if (typeof MutationObserver !== 'undefined') {
+    examState.extensionObserver = new MutationObserver(() => {
+      if (typeof sanitizeAndProtectStudentInputs === 'function') {
+        sanitizeAndProtectStudentInputs(document);
+      }
+    });
+    examState.extensionObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'data-grammarly-part']
+    });
+  }
+
+  if (typeof sanitizeAndProtectStudentInputs === 'function') {
+    sanitizeAndProtectStudentInputs(document);
+  }
+
   examState.proctorExamId = examId;
   document.addEventListener('visibilitychange', handleVisibilityChange);
   window.addEventListener('blur', handleBlur);
@@ -937,6 +977,11 @@ function cleanupProctoring() {
   document.removeEventListener('visibilitychange', handleVisibilityChange);
   window.removeEventListener('blur',               handleBlur);
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
+
+  if (examState.extensionObserver) {
+    try { examState.extensionObserver.disconnect(); } catch {}
+    examState.extensionObserver = null;
+  }
 
   document.body.classList.remove('exam-proctoring-active');
 

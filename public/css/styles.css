@@ -770,4 +770,57 @@ body.exam-proctoring-active [contenteditable="true"] {
   user-select: text !important;
   -webkit-user-select: text !important;
   pointer-events: auto !important;
+  -webkit-user-modify: read-write-plaintext-only !important;
 }
+
+/* ─── CHROME EXTENSION & AI ASSISTANT BLOCKING ─────────────────────────────── */
+/* Completely disable and hide third-party writing assistants (Grammarly, LanguageTool, QuillBot, Wordtune, Compose AI, Sider, Monica, DeepSeek, Harpa, ChatGPT extensions, etc.) */
+grammarly-extension,
+grammarly-popups,
+grammarly-mirror,
+grammarly-card,
+[data-grammarly-part],
+[data-grammarly-shadow-root],
+lt-mirror,
+lt-toolbar,
+lt-comp-icon,
+lt-card,
+lt-div,
+quillbot-extension-root,
+quillbot-container,
+compose-ai-menu,
+chatgpt-sidebar,
+deepseek-sidebar,
+copilot-sidebar-container,
+div[class*="grammarly"],
+div[id*="grammarly"],
+div[class*="quillbot"],
+div[id*="quillbot"],
+div[class*="languagetool"],
+div[id*="languagetool"],
+div[class*="compose-ai"],
+div[id*="compose-ai"],
+div[class*="wordtune"],
+div[id*="wordtune"],
+div[id*="sider-"],
+div[class*="sider-"],
+div[id*="monica-"],
+div[class*="monica-"],
+div[id*="harpa-"],
+div[class*="harpa-"],
+div[id*="maxai-"],
+div[class*="maxai-"],
+div[class*="deepseek"],
+div[id*="deepseek"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  clip: rect(0, 0, 0, 0) !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  position: absolute !important;
+  z-index: -9999 !important;
+}
+

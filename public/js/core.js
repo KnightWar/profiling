@@ -850,10 +850,97 @@ function formatCodeBlock(code, language = 'python') {
   `;
 }
 
+function sanitizeAndProtectStudentInputs(root = document) {
+  const antiAttrs = {
+    'spellcheck': 'false',
+    'autocomplete': 'off',
+    'autocorrect': 'off',
+    'autocapitalize': 'off',
+    'writingsuggestions': 'false',
+    'data-gramm': 'false',
+    'data-gramm_editor': 'false',
+    'data-enable-grammarly': 'false',
+    'gramm': 'false',
+    'data-lt-active': 'false',
+    'data-lt-extension': 'false',
+    'data-lt-prevent-focus': 'true',
+    'data-quillbot': 'false',
+    'data-quillbot-installed': 'false',
+    'data-compose': 'false',
+    'data-ms-editor': 'false',
+    'data-ai': 'false',
+    'data-ai-assist': 'false',
+    'data-no-ai': 'true',
+    'data-dashlane-rm': 'true',
+    'data-1p-ignore': 'true',
+    'data-lpignore': 'true',
+    'data-form-type': 'other',
+  };
+
+  try {
+    const isSingleInput = root.tagName && (root.tagName === 'TEXTAREA' || root.tagName === 'INPUT');
+    const inputs = isSingleInput
+      ? [root]
+      : (root.querySelectorAll ? Array.from(root.querySelectorAll('textarea, input:not([type="hidden"]), [contenteditable="true"]')) : []);
+
+    inputs.forEach(el => {
+      for (const [attr, val] of Object.entries(antiAttrs)) {
+        if (el.getAttribute(attr) !== val) {
+          el.setAttribute(attr, val);
+        }
+      }
+    });
+
+    const extensionSelectors = [
+      'grammarly-extension',
+      'grammarly-popups',
+      'grammarly-mirror',
+      'grammarly-card',
+      '[data-grammarly-part]',
+      '[data-grammarly-shadow-root]',
+      'lt-mirror',
+      'lt-toolbar',
+      'lt-comp-icon',
+      'lt-card',
+      'lt-div',
+      'quillbot-extension-root',
+      'quillbot-container',
+      'compose-ai-menu',
+      'chatgpt-sidebar',
+      'deepseek-sidebar',
+      'copilot-sidebar-container',
+      'div[class*="grammarly"]',
+      'div[id*="grammarly"]',
+      'div[class*="quillbot"]',
+      'div[id*="quillbot"]',
+      'div[class*="languagetool"]',
+      'div[id*="languagetool"]',
+      'div[class*="compose-ai"]',
+      'div[id*="compose-ai"]',
+      'div[class*="wordtune"]',
+      'div[id*="wordtune"]',
+      'div[id*="sider-"]',
+      'div[class*="sider-"]',
+      'div[id*="monica-"]',
+      'div[class*="monica-"]',
+      'div[id*="harpa-"]',
+      'div[class*="harpa-"]',
+      'div[id*="maxai-"]',
+      'div[class*="maxai-"]'
+    ];
+
+    const found = document.querySelectorAll(extensionSelectors.join(','));
+    found.forEach(node => {
+      try { node.remove(); } catch {}
+    });
+  } catch (err) {}
+}
+
 function setupCodeTextarea(textarea) {
   if (!textarea || textarea.dataset.codeEnhanced) return;
   textarea.dataset.codeEnhanced = 'true';
   textarea.style.tabSize = '4';
+  sanitizeAndProtectStudentInputs(textarea);
   textarea.addEventListener('keydown', function (e) {
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -875,6 +962,7 @@ window.escapeHtml = escapeHtml;
 window.renderRichContent = renderRichContent;
 window.formatCodeBlock = formatCodeBlock;
 window.setupCodeTextarea = setupCodeTextarea;
+window.sanitizeAndProtectStudentInputs = sanitizeAndProtectStudentInputs;
 window.isGoogleChrome = isGoogleChrome;
 
 // ═══════════════════════════════════════════════════════════════════════════════

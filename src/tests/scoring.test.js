@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { computeComposite, gradeMCQ } = require('../services/scoring');
+const { computeComposite, gradeMCQ, gradeProgramming, isBoilerplateOrEmptyCode } = require('../services/scoring');
+const { LANGUAGE_STARTERS } = require('../services/codeRunner');
 
 test('computeComposite calculates scores and levels correctly', async (t) => {
 
@@ -42,3 +43,53 @@ test('gradeMCQ evaluates correct and incorrect options', () => {
   assert.equal(gradeMCQ({ answer_data: 'A' }, question), 0);
   assert.equal(gradeMCQ({ answer_data: '' }, question), 0);
 });
+
+test('gradeProgramming awards 0 marks for unwritten logic or boilerplate', async () => {
+  const question = {
+    marks: 10,
+    test_cases: [
+      { input: 'racecar', expected: 'true' },
+      { input: 'hello', expected: 'false' },
+    ],
+  };
+
+  // 1. Default Python starter without logic
+  const pythonStarterScore = await gradeProgramming({ answer_data: LANGUAGE_STARTERS.python }, question);
+  assert.equal(pythonStarterScore, 0, 'Python starter should get 0 marks');
+
+  // 2. Default JS starter without logic
+  const jsStarterScore = await gradeProgramming({ answer_data: LANGUAGE_STARTERS.javascript }, question);
+  assert.equal(jsStarterScore, 0, 'JavaScript starter should get 0 marks');
+
+  // 3. Default C starter without logic
+  const cStarterScore = await gradeProgramming({ answer_data: LANGUAGE_STARTERS.c }, question);
+  assert.equal(cStarterScore, 0, 'C starter should get 0 marks');
+
+  // 4. Empty and whitespace answers
+  assert.equal(await gradeProgramming({ answer_data: '' }, question), 0);
+  assert.equal(await gradeProgramming({ answer_data: '   \n \t  ' }, question), 0);
+  assert.equal(await gradeProgramming({ answer_data: 'def solution(x): pass' }, question), 0);
+
+  // 5. Code with failed test cases
+  const failedCode = `
+def solution(s):
+    return "wrong"
+if __name__ == '__main__':
+    import sys
+    print(solution(sys.stdin.read().strip()))
+  `;
+  const failedScore = await gradeProgramming({ answer_data: failedCode }, question);
+  assert.equal(failedScore, 0, 'Wrong code failing all test cases should get 0 marks');
+
+  // 6. Working code that passes all test cases
+  const workingCode = `
+def solution(s):
+    return "true" if s == s[::-1] else "false"
+if __name__ == '__main__':
+    import sys
+    print(solution(sys.stdin.read().strip()))
+  `;
+  const workingScore = await gradeProgramming({ answer_data: workingCode }, question);
+  assert.equal(workingScore, 10, 'Correct code passing all test cases should get 10 marks');
+});
+

@@ -161,18 +161,122 @@ function gradeOralTask(response, question) {
   return Math.round(question.marks * 0.60 * 2) / 2;
 }
 
-function gradeProgramming(response, question) {
-  if (!response.answer_data || !response.answer_data.trim()) return 0;
-  const code = response.answer_data.trim();
-  if (code.length < 10) return 0;
+function stripCodeCommentsAndWhitespace(code) {
+  if (!code) return '';
+  let clean = String(code);
+  // Strip block comments /* ... */ or """ ... """ / ''' ... '''
+  clean = clean.replace(/\/\*[\s\S]*?\*\//g, '');
+  clean = clean.replace(/"""[\s\S]*?"""/g, '');
+  clean = clean.replace(/'''[\s\S]*?'''/g, '');
+  // Strip line comments // ... or # ...
+  clean = clean.replace(/\/\/.*$/gm, '');
+  clean = clean.replace(/#.*$/gm, '');
+  // Normalize whitespace
+  clean = clean.replace(/\s+/g, ' ').trim();
+  return clean;
+}
 
-  if (question.correct_answer && question.correct_answer.trim()) {
-    const sim = calculateTextSimilarity(code, question.correct_answer.trim());
-    if (sim >= 0.80) return question.marks;
-    if (sim >= 0.40) return Math.round(question.marks * 0.80 * 2) / 2;
+function isBoilerplateOrEmptyCode(code) {
+  if (!code || !code.trim()) return true;
+  const rawTrimmed = code.trim();
+  if (rawTrimmed.length === 0) return true;
+
+  const { LANGUAGE_STARTERS } = require('./codeRunner');
+
+  // Check exact/normalized match with language starter templates
+  if (LANGUAGE_STARTERS) {
+    for (const starter of Object.values(LANGUAGE_STARTERS)) {
+      if (rawTrimmed === starter.trim()) return true;
+      const cleanStarter = stripCodeCommentsAndWhitespace(starter);
+      const cleanUser = stripCodeCommentsAndWhitespace(code);
+      if (cleanUser === cleanStarter) return true;
+    }
   }
 
-  return Math.round(question.marks * 0.70 * 2) / 2;
+  const clean = stripCodeCommentsAndWhitespace(code);
+  // Extremely short or empty after comment removal
+  if (clean.length < 5) return true;
+
+  // Check for trivial Python patterns with no actual logic:
+  const trivialPython = [
+    /^def solution\s*\([^)]*\)\s*:\s*(return\s*[a-zA-Z0-9_]*|pass)\s*(if __name__.*)?$/i,
+    /^def solution\s*\([^)]*\)\s*:\s*pass\s*$/i,
+    /^def solution\s*\([^)]*\)\s*:\s*return\s*$/i,
+    /^def solution\s*\([^)]*\)\s*:\s*return\s+(None|input_data|input|s|data|arr|num|n)\s*(if __name__.*)?$/i,
+    /^pass$/i,
+    /^return$/i,
+  ];
+
+  for (const pattern of trivialPython) {
+    if (pattern.test(clean)) return true;
+  }
+
+  // Check for trivial JS patterns:
+  const trivialJS = [
+    /^function solution\s*\([^)]*\)\s*\{\s*(return\s*[a-zA-Z0-9_]*;?|;?)\s*\}\s*(const input.*)?$/i,
+    /^function solution\s*\([^)]*\)\s*\{\s*return\s+(inputData|input|undefined|null|"");?\s*\}\s*(const input.*)?$/i,
+  ];
+
+  for (const pattern of trivialJS) {
+    if (pattern.test(clean)) return true;
+  }
+
+  // Check for trivial C / C++ patterns:
+  const trivialC = [
+    /^(char\*|string|int|void)\s+solution\s*\([^)]*\)\s*\{\s*return\s+[a-zA-Z0-9_"]*;\s*\}\s*(int main.*)?$/i,
+  ];
+  for (const pattern of trivialC) {
+    if (pattern.test(clean)) return true;
+  }
+
+  return false;
+}
+
+async function gradeProgramming(response, question) {
+  if (!response.answer_data || !response.answer_data.trim()) return 0;
+  const code = response.answer_data.trim();
+
+  // 1. If code is trivial boilerplate / starter template with no custom logic, 0 marks
+  if (isBoilerplateOrEmptyCode(code)) {
+    return 0;
+  }
+
+  // 2. Parse test cases if present
+  let testCases = question.test_cases;
+  if (typeof testCases === 'string') {
+    try { testCases = JSON.parse(testCases); } catch (e) { testCases = []; }
+  }
+
+  // 3. If question has test cases, execute them against the submitted code
+  if (Array.isArray(testCases) && testCases.length > 0) {
+    try {
+      const { runTestCases, detectLanguage } = require('./codeRunner');
+      const lang = detectLanguage(code);
+      const testResult = await runTestCases({ code, language: lang, testCases, timeout: 4000 });
+
+      if (testResult && testResult.totalCount > 0) {
+        if (testResult.passedCount === 0) return 0;
+        const passRatio = testResult.passedCount / testResult.totalCount;
+        const awarded = Math.round(question.marks * passRatio * 2) / 2;
+        return awarded;
+      }
+    } catch (err) {
+      console.error('gradeProgramming runTestCases error:', err);
+    }
+  }
+
+  // 4. Fallback if no test cases are configured on the question:
+  // Compare with model answer if available
+  if (question.correct_answer && question.correct_answer.trim()) {
+    const sim = calculateTextSimilarity(code, question.correct_answer.trim());
+    if (sim >= 0.85) return question.marks;
+    if (sim >= 0.60) return Math.round(question.marks * 0.70 * 2) / 2;
+    if (sim >= 0.35) return Math.round(question.marks * 0.40 * 2) / 2;
+    return 0;
+  }
+
+  // If no test cases and no model answer, do not award marks automatically without verified execution
+  return 0;
 }
 
 // ─── Auto-grade a single response ───────────────────────────────────────────
@@ -200,7 +304,7 @@ async function autoGradeResponse(responseId) {
   if (response.type === 'mcq') {
     marksAwarded = gradeMCQ(response, response);
   } else if (response.type === 'programming') {
-    marksAwarded = gradeProgramming(response, response);
+    marksAwarded = await gradeProgramming(response, response);
   } else if (response.type === 'oral_task') {
     marksAwarded = gradeOralTask(response, response);
   } else if (response.type === 'subjective' || response.type === 'writing_task') {
@@ -379,6 +483,8 @@ async function recomputeAllStudents() {
 module.exports = {
   computeComposite,
   gradeMCQ,
+  gradeProgramming,
+  isBoilerplateOrEmptyCode,
   autoGradeResponse,
   autoGradeUngradedResponses,
   recomputeComponentTotal,

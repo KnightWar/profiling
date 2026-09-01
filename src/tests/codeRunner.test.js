@@ -2,11 +2,53 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { executeCode, runTestCases, detectLanguage } = require('../services/codeRunner');
 
-test('detectLanguage correctly identifies Python vs JavaScript', () => {
+test('detectLanguage correctly identifies Python, JavaScript, SQL and Bash', () => {
   assert.equal(detectLanguage('def solution():\n    return 42'), 'python');
   assert.equal(detectLanguage('function solve() {\n  return 42;\n}'), 'javascript');
   assert.equal(detectLanguage('const x = 10; console.log(x);'), 'javascript');
   assert.equal(detectLanguage('print("hello")'), 'python');
+  assert.equal(detectLanguage('SELECT name, salary FROM employees WHERE salary > 50000;'), 'sql');
+  assert.equal(detectLanguage('#!/bin/bash\ncat file.txt | grep "error" | awk \'{print $1}\''), 'bash');
+  assert.equal(detectLanguage('grep -i "test" file.txt'), 'bash');
+});
+
+test('executeCode runs SQL query against in-memory table setup', async () => {
+  const setupInput = `
+    CREATE TABLE employees (id INT, name TEXT, salary INT);
+    INSERT INTO employees VALUES (1, 'Alice', 70000), (2, 'Bob', 45000), (3, 'Charlie', 85000);
+  `;
+  const sqlQuery = `
+    SELECT name, salary
+    FROM employees
+    WHERE salary >= 70000
+    ORDER BY salary DESC;
+  `;
+
+  const result = await executeCode({
+    code: sqlQuery,
+    language: 'sql',
+    input: setupInput,
+  });
+
+  assert.equal(result.status, 'success');
+  assert.equal(result.exitCode, 0);
+  assert.ok(result.stdout.includes('Charlie\t85000'));
+  assert.ok(result.stdout.includes('Alice\t70000'));
+  assert.ok(!result.stdout.includes('Bob'));
+});
+
+test('executeCode runs Bash commands with piped stdin', async () => {
+  const result = await executeCode({
+    code: 'grep -i "error" | sort',
+    language: 'bash',
+    input: 'INFO: system ready\nERROR: timeout connection\nDEBUG: trace\nERROR: bad auth\n',
+  });
+
+  assert.equal(result.status, 'success');
+  assert.equal(result.exitCode, 0);
+  assert.ok(result.stdout.includes('ERROR: bad auth'));
+  assert.ok(result.stdout.includes('ERROR: timeout connection'));
+  assert.ok(!result.stdout.includes('INFO: system ready'));
 });
 
 test('executeCode runs Python code with stdin input', async () => {

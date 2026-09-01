@@ -65,12 +65,17 @@ Strict Rules:
 - Return ONLY the JSON array.
 - "correct_answer" must provide a thorough, accurate reference answer for evaluators to grade against.`,
 
-    programming: (topic, desc, count, diff) => `You are a competitive programming problem setter and staff software engineer.
+    programming: (topic, desc, count, diff) => `You are a staff software engineer and competitive assessment author (HackerRank / LeetCode / Industry Standard).
 
 Topic: ${topic}
-Target Programming Language / Stack: ${desc || 'Python / Universal (or specified language in topic/description)'}
+Target Track / Language / Domain: ${desc || 'General Software Engineering / SQL Database / Linux Bash / Python / JavaScript / C / C++'}
 Difficulty Level: ${diff}
-Target: Generate exactly ${count} complete programming challenges. Marks: easy=3, medium=5, hard=8.
+Target: Generate exactly ${count} industry-standard technical challenges. Marks: easy=3, medium=5, hard=8.
+
+Support all major technical assessment categories:
+1. Algorithmic & Software Engineering (Python, JavaScript, C, C++): function/program reading input from stdin or arguments and printing/returning output.
+2. Database Querying (SQL): Write queries (SELECT, JOIN, Aggregations, Window functions, Subqueries, CTEs). For SQL problems, the "test_cases" input MUST include the schema setup DDL/INSERT statements (e.g. "CREATE TABLE employees (id INT, name TEXT, salary INT); INSERT INTO employees VALUES (1, 'Alice', 70000), (2, 'Bob', 50000);") and "expected" MUST contain the expected tabular result.
+3. Command Writing & Shell Scripting (Linux / Bash): Write shell commands / pipelines (grep, awk, sed, find, sort, uniq, cut, curl, pipes). "test_cases" input provides the raw text/log lines, and "expected" provides the expected command output.
 
 Output Format: Return a raw JSON array of objects with this EXACT structure:
 [
@@ -78,20 +83,20 @@ Output Format: Return a raw JSON array of objects with this EXACT structure:
     "type": "programming",
     "marks": 5,
     "difficulty": "${diff}",
-    "content": "### Problem Description\\nState the problem clearly with background and objectives.\\n\\n### Input Format\\nDescribe input arguments or stdin format.\\n\\n### Output Format\\nDescribe expected return value or stdout.\\n\\n### Constraints\\n- Time Complexity: O(...)\\n- Space Complexity: O(...)\\n- 1 <= N <= 10^5\\n\\n### Example 1\\n**Input:** ...\\n**Output:** ...\\n**Explanation:** ...\\n\\n### Example 2\\n**Input:** ...\\n**Output:** ...",
-    "correct_answer": "def solve(args):\\n    # Clean, syntactically correct, optimized reference solution\\n    pass",
+    "content": "### Problem Description\\nState the problem clearly with background, schema/tables (if SQL) or file structure (if Bash), and objectives.\\n\\n### Input / Schema Format\\nDescribe input arguments, schema, or stdin format.\\n\\n### Output Format\\nDescribe expected return value, tabular result, or stdout.\\n\\n### Constraints\\n- Time Complexity: O(...)\\n- Edge cases to consider\\n\\n### Example 1\\n**Input:** ...\\n**Output:** ...\\n**Explanation:** ...\\n\\n### Example 2\\n**Input:** ...\\n**Output:** ...",
+    "correct_answer": "Clean, syntactically correct, optimized reference solution (Python function, SQL query, or Bash command)",
     "test_cases": [
-      { "input": "sample_input_1", "expected": "sample_output_1" },
-      { "input": "sample_input_2", "expected": "sample_output_2" },
-      { "input": "sample_input_3", "expected": "sample_output_3" }
+      { "input": "sample_input_or_sql_ddl_1", "expected": "sample_output_1" },
+      { "input": "sample_input_or_sql_ddl_2", "expected": "sample_output_2" },
+      { "input": "sample_input_or_sql_ddl_3", "expected": "sample_output_3" }
     ]
   }
 ]
 
 Strict Rules:
 - Return ONLY the JSON array.
-- "content" MUST use clean Markdown with Problem Description, Input/Output Format, Constraints, and Examples.
-- "correct_answer" MUST contain clean, valid, syntactically correct code in the requested language (or Python if unspecified) with proper indentation. Escape quotes and newlines properly (\\\\n).
+- "content" MUST use clean Markdown with Problem Description, Input/Output/Schema Format, Constraints, and Examples.
+- "correct_answer" MUST contain clean, valid, syntactically correct code in the requested domain (SQL, Bash, Python, JavaScript, C, etc.) with proper indentation. Escape quotes and newlines properly (\\\\n).
 - Provide at least 3 concrete test cases in "test_cases".`,
   },
 

@@ -91,5 +91,41 @@ if __name__ == '__main__':
   `;
   const workingScore = await gradeProgramming({ answer_data: workingCode }, question);
   assert.equal(workingScore, 10, 'Correct code passing all test cases should get 10 marks');
+
+  // 7. SQL Database Query grading
+  const sqlQuestion = {
+    marks: 5,
+    test_cases: [
+      {
+        input: "CREATE TABLE dept (id INT, name TEXT); INSERT INTO dept VALUES (1, 'Engineering'), (2, 'Sales');",
+        expected: 'name\nEngineering',
+      },
+    ],
+  };
+
+  // SQL starter gets 0 marks
+  assert.equal(await gradeProgramming({ answer_data: LANGUAGE_STARTERS.sql }, sqlQuestion), 0);
+  // Incorrect SQL query gets 0 marks
+  assert.equal(await gradeProgramming({ answer_data: 'SELECT * FROM dept;' }, sqlQuestion), 0);
+  // Correct SQL query gets full marks
+  assert.equal(await gradeProgramming({ answer_data: 'SELECT name FROM dept WHERE id = 1;' }, sqlQuestion), 5);
+
+  // 8. Bash Command Writing grading
+  const bashQuestion = {
+    marks: 5,
+    test_cases: [
+      {
+        input: 'apple\nbanana\ncherry\navocado\n',
+        expected: 'apple\navocado',
+      },
+    ],
+  };
+
+  // Bash starter gets 0 marks
+  assert.equal(await gradeProgramming({ answer_data: LANGUAGE_STARTERS.bash }, bashQuestion), 0);
+  // Incorrect bash gets 0 marks
+  assert.equal(await gradeProgramming({ answer_data: 'grep "z"' }, bashQuestion), 0);
+  // Correct bash gets full marks
+  assert.equal(await gradeProgramming({ answer_data: 'grep "^a"' }, bashQuestion), 5);
 });
 

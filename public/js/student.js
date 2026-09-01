@@ -356,6 +356,8 @@ function buildQuestionCard(examId) {
           <select id="code-lang-select" class="form-select" onchange="changeLanguageTemplate(${q.id}, this.value, ${examId})" style="padding:2px 8px; font-size:0.75rem; height:26px; background:#21262d; border-color:#30363d; color:#f0f6fc; width:auto;">
             <option value="python">Python 3</option>
             <option value="javascript">JavaScript (Node.js)</option>
+            <option value="sql">SQL (Database Query)</option>
+            <option value="bash">Bash / Shell (Command Line)</option>
             <option value="c">C</option>
             <option value="cpp">C++</option>
             <option value="html_css">HTML & CSS</option>
@@ -1265,6 +1267,10 @@ const STUDENT_LANGUAGE_STARTERS = {
   python: `def solution(input_data):\n    # Write your solution logic here\n    return input_data\n\nif __name__ == '__main__':\n    import sys\n    input_str = sys.stdin.read().strip()\n    result = solution(input_str)\n    if result is not None:\n        print(result)`,
 
   javascript: `function solution(inputData) {\n    // Write your solution logic here\n    return inputData;\n}\n\nconst input = typeof readline === 'function' ? readline() : '';\nconst result = solution(input);\nif (result !== undefined) {\n    console.log(result);\n}`,
+
+  sql: `-- Write your SQL query below (SELECT, JOIN, GROUP BY, Subqueries, etc.)\nSELECT \n    * \nFROM \n    your_table;`,
+
+  bash: `#!/usr/bin/env bash\n# Write your shell command or pipeline below\n# Example: grep -i "error" | awk '{print $1, $3}'\n\ncat`,
 
   c: `#include <stdio.h>\n#include <string.h>\n\nchar* solution(char* input) {\n    // Write your solution logic here\n    return input;\n}\n\nint main() {\n    char input[1024] = "";\n    if (scanf("%1023s", input) == 1) {\n        printf("%s\\n", solution(input));\n    } else {\n        printf("%s\\n", solution(input));\n    }\n    return 0;\n}`,
 

@@ -229,6 +229,24 @@ function isBoilerplateOrEmptyCode(code) {
     if (pattern.test(clean)) return true;
   }
 
+  // Check for trivial SQL patterns:
+  const trivialSQL = [
+    /^SELECT\s+\*\s+FROM\s+(your_table|table_name|table|sample_table);?$/i,
+    /^SELECT\s+\*\s*;?$/i,
+  ];
+  for (const pattern of trivialSQL) {
+    if (pattern.test(clean)) return true;
+  }
+
+  // Check for trivial Bash patterns:
+  const trivialBash = [
+    /^#!\/bin\/(bash|sh)\s*$/i,
+    /^#!\/usr\/bin\/env\s+(bash|sh)\s*(cat)?$/i,
+  ];
+  for (const pattern of trivialBash) {
+    if (pattern.test(clean)) return true;
+  }
+
   return false;
 }
 

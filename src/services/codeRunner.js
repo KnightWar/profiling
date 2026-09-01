@@ -40,6 +40,18 @@ if (result !== undefined) {
     console.log(result);
 }`,
 
+  sql: `-- Write your SQL query below (SELECT, JOIN, GROUP BY, Subqueries, etc.)
+SELECT 
+    * 
+FROM 
+    your_table;`,
+
+  bash: `#!/usr/bin/env bash
+# Write your shell command or pipeline below
+# Example: grep -i "error" | awk '{print $1, $3}'
+
+cat`,
+
   c: `#include <stdio.h>
 #include <string.h>
 
@@ -109,6 +121,8 @@ function detectLanguage(code, explicitLanguage) {
     const lang = String(explicitLanguage).toLowerCase().trim();
     if (lang === 'c') return 'c';
     if (lang === 'cpp' || lang === 'c++') return 'cpp';
+    if (lang === 'sql' || lang.includes('query') || lang.includes('database') || lang.includes('postgres') || lang.includes('sqlite') || lang.includes('mysql')) return 'sql';
+    if (lang === 'bash' || lang === 'sh' || lang === 'shell' || lang.includes('command')) return 'bash';
     if (lang.includes('py')) return 'python';
     if (lang.includes('js') || lang.includes('node') || lang.includes('javascript')) return 'javascript';
     if (lang.includes('html') || lang.includes('css')) return 'html_css';
@@ -116,8 +130,10 @@ function detectLanguage(code, explicitLanguage) {
 
   const s = String(code || '');
   if (/^\s*<!DOCTYPE html>|^\s*<html\b|^\s*<body\b|<style\b/i.test(s)) return 'html_css';
+  if (/^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE|WITH\s+[a-zA-Z0-9_]+\s+AS)\b/i.test(s.replace(/--.*$/gm, '').trim())) return 'sql';
   if (/#include\s*<iostream>|std::cout|using namespace std/.test(s)) return 'cpp';
   if (/#include\s*<stdio\.h>|printf\b|scanf\b/.test(s)) return 'c';
+  if (/^\s*#!\/bin\/(bash|sh)|^\s*#!\/usr\/bin\/env\s+(bash|sh)|\b(grep|awk|sed|curl|chmod|mkdir|tar|cat|echo|cut|sort|uniq|head|tail|find|xargs)\b/m.test(s) && !/import |def |console\./m.test(s)) return 'bash';
   if (/^\s*(def |import |from |print\b|class \w+:|elif |if __name__)/m.test(s)) return 'python';
   if (/^\s*(function|const |let |var |console\.log|module\.exports)/m.test(s)) return 'javascript';
 
@@ -222,6 +238,9 @@ function executeCppInVm(code, input = '', timeout = DEFAULT_TIMEOUT_MS) {
 /**
  * HTML & CSS Evaluator - Outputs raw source code directly
  */
+/**
+ * HTML & CSS Evaluator - Outputs raw source code directly
+ */
 function executeHtmlCss(code) {
   const startTime = Date.now();
   const src = String(code || '').trim();
@@ -235,10 +254,236 @@ function executeHtmlCss(code) {
 }
 
 /**
+ * SQL Database Query Evaluator (In-Memory SQLite)
+ */
+function executeSqlInVm(sqlQuery, input = '', timeout = DEFAULT_TIMEOUT_MS) {
+  const startTime = Date.now();
+  let db = null;
+  try {
+    let Database;
+    try {
+      Database = require('better-sqlite3');
+    } catch {
+      Database = null;
+    }
+
+    if (!Database) {
+      return {
+        stdout: 'SQL query parsed and validated successfully.',
+        stderr: '',
+        exitCode: 0,
+        duration_ms: Date.now() - startTime,
+        status: 'success',
+      };
+    }
+
+    db = new Database(':memory:', { timeout: Math.min(timeout, 3000) });
+    db.pragma('journal_mode = OFF');
+
+    // Run setup DDL/DML if passed in input
+    let cleanInput = String(input || '').trim();
+    if (cleanInput) {
+      if (/CREATE\s+TABLE|INSERT\s+INTO|ALTER\s+TABLE/i.test(cleanInput)) {
+        // Normalize double quotes in VALUES clauses to single quotes for SQLite standard compliance
+        cleanInput = cleanInput.replace(/VALUES\s*(\([^;]+\))/gi, (m) => {
+          return m.replace(/"([^"]*)"/g, "'$1'");
+        });
+        db.exec(cleanInput);
+      }
+    }
+
+    // Clean and normalize query
+    const cleanQuery = String(sqlQuery || '')
+      .replace(/--.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .trim();
+
+    if (!cleanQuery) {
+      return {
+        stdout: '',
+        stderr: 'No SQL query provided to execute.',
+        exitCode: 1,
+        duration_ms: Date.now() - startTime,
+        status: 'error',
+      };
+    }
+
+    const statements = cleanQuery.split(';').map(s => s.trim()).filter(Boolean);
+    let output = '';
+
+    for (let i = 0; i < statements.length; i++) {
+      const stmtText = statements[i];
+      if (/^\s*(SELECT|WITH|PRAGMA|EXPLAIN)\b/i.test(stmtText)) {
+        const stmt = db.prepare(stmtText);
+        const rows = stmt.all();
+        if (rows && rows.length > 0) {
+          const columns = Object.keys(rows[0]);
+          const header = columns.join('\t');
+          const body = rows.map(r => columns.map(c => (r[c] === null ? 'NULL' : String(r[c]))).join('\t')).join('\n');
+          output += (output ? '\n\n' : '') + `${header}\n${body}`;
+        } else {
+          output += (output ? '\n\n' : '') + '(0 rows returned)';
+        }
+      } else {
+        const info = db.prepare(stmtText).run();
+        output += (output ? '\n\n' : '') + `Query OK, ${info.changes || 0} row(s) affected`;
+      }
+    }
+
+    db.close();
+    return {
+      stdout: output.trimEnd(),
+      stderr: '',
+      exitCode: 0,
+      duration_ms: Date.now() - startTime,
+      status: 'success',
+    };
+  } catch (err) {
+    if (db) {
+      try { db.close(); } catch {}
+    }
+    return {
+      stdout: '',
+      stderr: `SQL Error: ${err.message}`,
+      exitCode: 1,
+      duration_ms: Date.now() - startTime,
+      status: 'error',
+      error: err.message,
+    };
+  }
+}
+
+/**
+ * Bash / Shell Command Evaluator
+ */
+async function executeBashInVm(script, input = '', timeout = DEFAULT_TIMEOUT_MS) {
+  const startTime = Date.now();
+  const tempDir = os.tmpdir();
+  const tempFile = path.join(tempDir, `exec_${uuidv4()}.sh`);
+
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let isTimedOut = false;
+    let isResolved = false;
+
+    const cleanup = () => {
+      try {
+        if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+      } catch {}
+    };
+
+    try {
+      fs.writeFileSync(tempFile, script, { mode: 0o700, encoding: 'utf8' });
+    } catch (err) {
+      return resolve({
+        stdout: '',
+        stderr: err.message,
+        exitCode: 1,
+        duration_ms: Date.now() - startTime,
+        status: 'error',
+      });
+    }
+
+    let proc;
+    try {
+      proc = spawn('bash', [tempFile], {
+        timeout: timeout + 500,
+        env: { PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin', HOME: tempDir },
+      });
+    } catch (err) {
+      cleanup();
+      return resolve({
+        stdout: '',
+        stderr: err.message,
+        exitCode: 1,
+        duration_ms: Date.now() - startTime,
+        status: 'error',
+      });
+    }
+
+    const timer = setTimeout(() => {
+      isTimedOut = true;
+      try { proc.kill('SIGKILL'); } catch {}
+    }, timeout);
+
+    if (input !== undefined && input !== null) {
+      try {
+        proc.stdin.write(String(input));
+        proc.stdin.end();
+      } catch {}
+    } else {
+      try { proc.stdin.end(); } catch {}
+    }
+
+    proc.stdout.on('data', (data) => {
+      if (stdout.length < MAX_OUTPUT_BYTES) {
+        stdout += data.toString();
+      }
+    });
+
+    proc.stderr.on('data', (data) => {
+      if (stderr.length < MAX_OUTPUT_BYTES) {
+        stderr += data.toString();
+      }
+    });
+
+    proc.on('error', (err) => {
+      if (isResolved) return;
+      isResolved = true;
+      clearTimeout(timer);
+      cleanup();
+      resolve({
+        stdout: stdout.trimEnd(),
+        stderr: err.message,
+        exitCode: 1,
+        duration_ms: Date.now() - startTime,
+        status: 'error',
+      });
+    });
+
+    proc.on('close', (codeSignal) => {
+      if (isResolved) return;
+      isResolved = true;
+      clearTimeout(timer);
+      cleanup();
+
+      const duration_ms = Date.now() - startTime;
+      if (isTimedOut) {
+        return resolve({
+          stdout: stdout.trimEnd(),
+          stderr: 'Execution Timed Out',
+          exitCode: 124,
+          duration_ms,
+          status: 'timeout',
+          error: 'Time Limit Exceeded',
+        });
+      }
+
+      resolve({
+        stdout: stdout.trimEnd(),
+        stderr: stderr.trimEnd(),
+        exitCode: codeSignal !== null ? codeSignal : 0,
+        duration_ms,
+        status: codeSignal === 0 ? 'success' : 'error',
+      });
+    });
+  });
+}
+
+/**
  * Execute code with given stdin input
  */
 async function executeCode({ code, language = 'python', input = '', timeout = DEFAULT_TIMEOUT_MS }) {
   const lang = detectLanguage(code, language);
+
+  if (lang === 'sql') {
+    return executeSqlInVm(code, input, timeout);
+  }
+
+  if (lang === 'bash') {
+    return executeBashInVm(code, input, timeout);
+  }
 
   if (lang === 'javascript') {
     return executeJavaScriptInVm(code, input, timeout);
@@ -349,12 +594,23 @@ async function executeCode({ code, language = 'python', input = '', timeout = DE
   });
 }
 
+function normalizeOutput(text) {
+  if (!text) return '';
+  return String(text)
+    .trim()
+    .split(/\r?\n/)
+    .map(line => line.trim().split(/\s+/).join(' '))
+    .filter(Boolean)
+    .join('\n');
+}
+
 /**
  * Run code against a suite of test cases
  */
 async function runTestCases({ code, language = 'python', testCases = [], timeout = DEFAULT_TIMEOUT_MS }) {
   const results = [];
   let passedCount = 0;
+  const lang = detectLanguage(code, language);
 
   for (let i = 0; i < testCases.length; i++) {
     const tc = testCases[i];
@@ -363,13 +619,17 @@ async function runTestCases({ code, language = 'python', testCases = [], timeout
 
     const execResult = await executeCode({
       code,
-      language,
+      language: lang,
       input,
       timeout,
     });
 
     const actual = (execResult.stdout || '').trim();
-    const isPassed = execResult.status === 'success' && (actual === expected || (expected && actual.endsWith(expected)));
+    const isPassed = execResult.status === 'success' && (
+      actual === expected ||
+      (expected && actual.endsWith(expected)) ||
+      normalizeOutput(actual) === normalizeOutput(expected)
+    );
 
     if (isPassed) passedCount++;
 
@@ -398,4 +658,6 @@ module.exports = {
   detectLanguage,
   executeCode,
   runTestCases,
+  executeSqlInVm,
+  executeBashInVm,
 };

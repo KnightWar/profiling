@@ -98,6 +98,65 @@ Strict Rules:
 - "content" MUST use clean Markdown with Problem Description, Input/Output/Schema Format, Constraints, and Examples.
 - "correct_answer" MUST contain clean, valid, syntactically correct code in the requested domain (SQL, Bash, Python, JavaScript, C, etc.) with proper indentation. Escape quotes and newlines properly (\\\\n).
 - Provide at least 3 concrete test cases in "test_cases".`,
+
+    sql: (topic, desc, count, diff) => `You are a database engineer and SQL assessment problem setter (LeetCode SQL / HackerRank SQL).
+
+Topic: ${topic}
+Focus: ${desc || 'Relational Database Querying with SQL (PostgreSQL / MySQL / SQLite standard)'}
+Difficulty Level: ${diff}
+Target: Generate exactly ${count} database querying challenges. Marks: easy=3, medium=5, hard=8.
+
+Output Format: Return a raw JSON array of objects with this EXACT structure:
+[
+  {
+    "type": "programming",
+    "marks": 5,
+    "difficulty": "${diff}",
+    "content": "### Problem Description\\nState the business/querying requirement clearly.\\n\\n### Database Schema\\n\`\`\`sql\\n-- Table: employees (id, name, department_id, salary, hire_date)\\n-- Table: departments (id, department_name)\\n\`\`\`\\n\\n### Requirements\\nWrite a single SQL query that returns the required columns.\\n\\n### Example Output\\n| department_name | avg_salary |",
+    "correct_answer": "SELECT d.department_name, AVG(e.salary) AS avg_salary FROM departments d JOIN employees e ON e.department_id = d.id GROUP BY d.department_name;",
+    "test_cases": [
+      {
+        "input": "CREATE TABLE departments (id INT, department_name TEXT); CREATE TABLE employees (id INT, name TEXT, department_id INT, salary INT); INSERT INTO departments VALUES (1, 'Engineering'), (2, 'Sales'); INSERT INTO employees VALUES (1, 'Alice', 1, 90000), (2, 'Bob', 1, 80000), (3, 'Charlie', 2, 60000);",
+        "expected": "department_name\tavg_salary\nEngineering\t85000\nSales\t60000"
+      }
+    ]
+  }
+]
+
+Strict Rules:
+- Return ONLY the JSON array.
+- "test_cases" input MUST contain valid SQLite/SQL CREATE TABLE and INSERT INTO statements with seed rows.
+- "test_cases" expected MUST contain the tab-separated tabular output.
+- Provide at least 2 test cases with different data configurations.`,
+
+    bash: (topic, desc, count, diff) => `You are a Linux systems engineer and command line assessment setter.
+
+Topic: ${topic}
+Focus: ${desc || 'Linux Shell Scripting & Command Writing (grep, awk, sed, find, sort, uniq, cut, pipes)'}
+Difficulty Level: ${diff}
+Target: Generate exactly ${count} Linux command / shell pipeline challenges. Marks: easy=3, medium=5, hard=8.
+
+Output Format: Return a raw JSON array of objects with this EXACT structure:
+[
+  {
+    "type": "programming",
+    "marks": 5,
+    "difficulty": "${diff}",
+    "content": "### Problem Description\\nState the text-processing or system command task clearly.\\n\\n### Input Format\\nDescribe the stdin input lines / log format.\\n\\n### Expected Output Format\\nDescribe stdout lines.\\n\\n### Example\\n**Input:**\\n...\\n**Output:**\\n...",
+    "correct_answer": "grep -E 'ERROR|FATAL' | awk '{print $1, $4}' | sort | uniq -c",
+    "test_cases": [
+      {
+        "input": "2026-09-01 10:00:00 [ERROR] Connection timed out\\n2026-09-01 10:01:00 [INFO] Heartbeat OK\\n2026-09-01 10:02:00 [FATAL] Disk full\\n",
+        "expected": "2026-09-01 Connection\\n2026-09-01 Disk"
+      }
+    ]
+  }
+]
+
+Strict Rules:
+- Return ONLY the JSON array.
+- "test_cases" input provides the raw stdin text/lines.
+- "correct_answer" must be a clean, valid bash command or one-line pipeline.`,
   },
 
   aptitude: {

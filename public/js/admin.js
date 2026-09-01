@@ -1134,11 +1134,13 @@ async function loadExamQuestions(examId, isBackground = false, targetTab = null)
             </div>
             <div class="form-group">
               <label class="form-label">Question Type (Mix)</label>
-              <select class="form-select" id="ai-qtype">
+              <select class="form-select" id="ai-qtype" onchange="updateAiTopicHint()">
                 <option value="auto">Auto (Component Default)</option>
                 <option value="mcq">MCQ Only</option>
                 <option value="subjective">Subjective Only</option>
-                <option value="programming">Programming Only</option>
+                <option value="programming">Programming (Algorithms & Code)</option>
+                <option value="sql">Database Querying (SQL Only)</option>
+                <option value="bash">Command Writing (Linux / Bash Only)</option>
                 <option value="oral_task">Oral Task Only</option>
               </select>
             </div>
@@ -1153,7 +1155,7 @@ async function loadExamQuestions(examId, isBackground = false, targetTab = null)
           </div>
           <div class="form-group">
             <label class="form-label">Description (optional)</label>
-            <textarea class="form-textarea" id="ai-description" rows="2" placeholder="Focus on traversal algorithms, balanced BSTs..."></textarea>
+            <textarea class="form-textarea" id="ai-description" rows="2" placeholder="e.g. Target specific tables, algorithms, or CLI text-processing tools..."></textarea>
           </div>
           <button type="button" class="btn btn-primary btn-lg" onclick="generateAIQuestions(${examId})" id="ai-generate-btn">
             <i class="ph ph-rocket-launch"></i> Generate Questions
@@ -1237,9 +1239,26 @@ async function submitManualQuestion(examId) {
   }
 }
 
+function updateAiTopicHint() {
+  const typeSelect = document.getElementById('ai-qtype');
+  const topicInput = document.getElementById('ai-topic');
+  const descInput = document.getElementById('ai-description');
+  if (!typeSelect || !topicInput) return;
+
+  const val = typeSelect.value;
+  if (val === 'sql') {
+    if (!topicInput.value || topicInput.value.includes('Data Structures')) topicInput.value = 'SQL Database - Queries & Aggregations';
+    if (descInput && !descInput.value) descInput.value = 'Relational queries with JOINs, GROUP BY, HAVING, subqueries, and window functions.';
+  } else if (val === 'bash') {
+    if (!topicInput.value || topicInput.value.includes('Data Structures')) topicInput.value = 'Linux Command Line & Shell Pipelines';
+    if (descInput && !descInput.value) descInput.value = 'Text processing with grep, awk, sed, sort, uniq, cut, and command pipelines.';
+  }
+}
+
 window.switchQmTab = switchQmTab;
 window.updateManualForm = updateManualForm;
 window.submitManualQuestion = submitManualQuestion;
+window.updateAiTopicHint = updateAiTopicHint;
 
 async function generateAIQuestions(examId) {
   const btn     = document.getElementById('ai-generate-btn');

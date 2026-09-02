@@ -1951,6 +1951,7 @@ async function renderScoreReports(isBackground = false, batchId = currentScoreBa
                 <th style="text-align:right;">Written (/500)</th>
                 <th style="text-align:right;">Composite (/5000)</th>
                 <th>Level</th>
+                <th style="text-align:right;">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1972,9 +1973,12 @@ async function renderScoreReports(isBackground = false, batchId = currentScoreBa
                   ${renderComponentScoreCell(sc.student_id, 'written', 'Written English', sc.w_score, eb.written_english)}
                   <td class="font-mono text-right" style="font-weight:700; color:var(--text-primary);">${sc.total_score}</td>
                   <td>${levelBadge(sc.level)}</td>
+                  <td style="text-align:right;" onclick="event.stopPropagation()">
+                    <button class="btn btn-action btn-sm" onclick="editStudent(${sc.student_id})" title="Reset Exam(s)"><i class="ph ph-arrows-clockwise"></i></button>
+                  </td>
                 </tr>
               `}).join('')}
-              ${scoresList.length === 0 ? '<tr><td colspan="9" class="text-center text-muted" style="padding:32px;">No student records found for this batch.</td></tr>' : ''}
+              ${scoresList.length === 0 ? '<tr><td colspan="10" class="text-center text-muted" style="padding:32px;">No student records found for this batch.</td></tr>' : ''}
             </tbody>
           </table>
         </div>
@@ -1988,10 +1992,9 @@ async function renderScoreReports(isBackground = false, batchId = currentScoreBa
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         const query = e.target.value.toLowerCase().trim();
-        const rows = main.querySelectorAll('.data-table tbody tr');
-        rows.forEach(row => {
-          const text = row.textContent.toLowerCase();
-          row.style.display = text.includes(query) ? '' : 'none';
+        document.querySelectorAll('.data-table tbody tr').forEach((tr) => {
+          const text = tr.textContent.toLowerCase();
+          tr.style.display = text.includes(query) ? '' : 'none';
         });
       });
     }
@@ -2045,6 +2048,7 @@ window.viewStudentScoreDetails = async function(studentId) {
                 <th>Component</th>
                 <th>Status</th>
                 <th style="text-align: right;">Score</th>
+                <th style="text-align: right;">Action</th>
               </tr>
             </thead>
             <tbody>

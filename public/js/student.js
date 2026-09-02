@@ -752,6 +752,10 @@ function stopOralRecording(qId, examId, finalTranscript) {
 // PROCTORING
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROCTORING & MACOS CHROME WINDOW LOCKDOWN
+// ═══════════════════════════════════════════════════════════════════════════════
+
 function setupProctoring(examId) {
   const isMobile  = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
   const isChrome  = typeof isGoogleChrome === 'function' ? isGoogleChrome() : (window.isGoogleChrome ? window.isGoogleChrome() : true);
@@ -770,12 +774,19 @@ function setupProctoring(examId) {
     return false;
   }
 
+  // 1. Enter Fullscreen Mode & Enable Chrome Keyboard Lock
   if (document.documentElement.requestFullscreen) {
-    document.documentElement.requestFullscreen().catch(err => {
-      console.warn(`Error attempting to enable fullscreen: ${err.message}`);
-    });
+    document.documentElement.requestFullscreen()
+      .then(() => enableKeyboardLock())
+      .catch(err => console.warn(`Fullscreen error: ${err.message}`));
   }
 
+  // 2. Prevent page unload / accidental closing / tab switching
+  window.addEventListener('beforeunload', handleBeforeUnload);
+  window.addEventListener('popstate', handlePopState);
+  window.history.pushState(null, null, window.location.href);
+
+  // 3. User interaction & shortcut prevention
   document.addEventListener('copy',        preventEvent);
   document.addEventListener('cut',         preventEvent);
   document.addEventListener('paste',       preventEvent);
@@ -839,28 +850,107 @@ function setupProctoring(examId) {
   return true;
 }
 
+/** Lock keyboard system shortcuts via Chrome Keyboard Lock API */
+async function enableKeyboardLock() {
+  if (navigator.keyboard && typeof navigator.keyboard.lock === 'function') {
+    try {
+      await navigator.keyboard.lock([
+        'Escape',
+        'Tab',
+        'KeyW',
+        'KeyQ',
+        'KeyN',
+        'KeyT',
+        'KeyR',
+        'KeyH',
+        'KeyM',
+        'MetaLeft',
+        'MetaRight',
+        'AltLeft',
+        'AltRight',
+        'ControlLeft',
+        'ControlRight',
+        'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'
+      ]);
+    } catch (err) {
+      console.warn('Keyboard lock could not be fully engaged:', err);
+    }
+  }
+}
+
+/** Release Chrome Keyboard Lock */
+function disableKeyboardLock() {
+  if (navigator.keyboard && typeof navigator.keyboard.unlock === 'function') {
+    try {
+      navigator.keyboard.unlock();
+    } catch (err) {
+      console.warn('Keyboard unlock:', err);
+    }
+  }
+}
+
+function handleBeforeUnload(e) {
+  if (examState.proctorExamId) {
+    e.preventDefault();
+    e.returnValue = 'Your exam is locked in progress. Leaving or reloading will forfeit unsubmitted answers.';
+    return e.returnValue;
+  }
+}
+
+function handlePopState(e) {
+  if (examState.proctorExamId) {
+    window.history.pushState(null, null, window.location.href);
+    showToast('The exam window is locked. Back navigation is disabled until submission.', 'warning');
+  }
+}
+
 function preventEvent(e) {
   e.preventDefault();
-  showToast('Copy/paste and right-click are disabled during the exam.', 'warning');
+  showToast('Copy/paste, cut, and right-click are locked during the exam.', 'warning');
 }
 
 function handleKeyDown(e) {
+  const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+  const key = e.key ? e.key.toLowerCase() : '';
   const isPrintScreen = e.key === 'PrintScreen' || e.code === 'PrintScreen' || e.keyCode === 44;
-  const isMacScreenshot = (e.metaKey || e.ctrlKey) && e.shiftKey && (['3', '4', '5', 's', 'S'].includes(e.key));
-  const isPrint = (e.metaKey || e.ctrlKey) && (e.key === 'p' || e.key === 'P');
+
+  // macOS and Chrome shortcut traps:
+  // Cmd+W (Close), Cmd+Q (Quit), Cmd+R (Reload), Cmd+T (New Tab), Cmd+N (New Window)
+  // Cmd+Shift+3/4/5 (macOS Screenshots), Cmd+P (Print), Cmd+S (Save), Cmd+U (View Source)
+  // Cmd+M (Minimize), Cmd+H (Hide), Cmd+Space (Spotlight)
+  const isWindowCloseOrQuit = isCmdOrCtrl && (key === 'w' || key === 'q');
+  const isReload = (isCmdOrCtrl && key === 'r') || e.key === 'F5';
+  const isNewTabOrWindow = isCmdOrCtrl && (key === 't' || key === 'n');
+  const isMacScreenshot = isCmdOrCtrl && e.shiftKey && (['3', '4', '5', 's'].includes(key));
+  const isPrint = isCmdOrCtrl && key === 'p';
+  const isSaveOrSource = isCmdOrCtrl && (key === 's' || key === 'u');
+  const isDevTools = (isCmdOrCtrl && (e.altKey || e.shiftKey) && (key === 'i' || key === 'j' || key === 'c')) || e.key === 'F12';
+  const isMinimizeOrHide = isCmdOrCtrl && (key === 'm' || key === 'h');
 
   if (isPrintScreen || isMacScreenshot || isPrint) {
     e.preventDefault();
     e.stopPropagation();
 
-    // Clear clipboard content
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText('').catch(() => {});
     }
 
     flashBlackoutOverlay();
     logViolation('screenshot_attempt', 'Student attempted a screenshot or screen capture.');
-    showToast('Screenshots and screen printing are strictly disabled during the exam.', 'error');
+    showToast('Screenshots and screen printing are strictly disabled.', 'error');
+    return false;
+  }
+
+  if (isWindowCloseOrQuit || isReload || isNewTabOrWindow || isSaveOrSource || isMinimizeOrHide || isDevTools) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (isDevTools) {
+      logViolation('devtools_attempt', 'Student attempted to open browser developer tools.');
+      showToast('Developer tools are locked during the exam.', 'error');
+    } else {
+      showToast('Exam window is locked. System navigation shortcuts are disabled.', 'warning');
+    }
     return false;
   }
 }
@@ -911,20 +1001,61 @@ function suppressNotifications() {
 }
 
 function handleVisibilityChange() {
-  if (document.visibilityState === 'hidden') {
+  if (document.visibilityState === 'hidden' && examState.proctorExamId) {
     logViolation('tab_switch', 'Student switched tabs or minimized the browser.');
   }
 }
 
 function handleBlur() {
-  logViolation('window_blur', 'Exam window lost focus.');
+  if (examState.proctorExamId) {
+    logViolation('window_blur', 'Exam window lost focus.');
+  }
 }
 
 function handleFullscreenChange() {
-  if (!document.fullscreenElement) {
+  if (!document.fullscreenElement && examState.proctorExamId) {
     logViolation('fullscreen_exit', 'Student exited full screen mode.');
+    showFullscreenLockModal();
+  } else if (document.fullscreenElement && examState.proctorExamId) {
+    const existingModal = document.getElementById('fullscreen-lock-modal');
+    if (existingModal) existingModal.remove();
+    enableKeyboardLock();
   }
 }
+
+function showFullscreenLockModal() {
+  let modal = document.getElementById('fullscreen-lock-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'fullscreen-lock-modal';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(10,15,29,0.98); color:white; z-index:999999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:2rem; backdrop-filter:blur(12px);';
+    modal.innerHTML = `
+      <div style="font-size:3.5rem; color:var(--accent-rose); margin-bottom:1rem;"><i class="ph ph-lock-key"></i></div>
+      <h1 style="color:var(--accent-rose); margin-bottom:1rem;">Exam Window Locked</h1>
+      <p style="font-size:1.15rem; max-width:540px; line-height:1.6; margin-bottom:1.5rem; color:#cbd5e1;">
+        ${typeof isMacChrome === 'function' && isMacChrome() ? '<strong style="color:#38bdf8;">macOS Chrome Exam Lockdown Active:</strong><br>' : ''}
+        The exam window is locked in Fullscreen mode. You cannot view external applications, switch windows, or make changes until you return to fullscreen.
+      </p>
+      <button class="btn btn-primary btn-lg" onclick="reEnterFullscreen()" style="padding:14px 28px; font-size:1.05rem; font-weight:700;">
+        <i class="ph ph-arrows-out"></i> Return to Fullscreen & Resume Exam
+      </button>
+    `;
+    document.body.appendChild(modal);
+  }
+}
+
+window.reEnterFullscreen = function() {
+  if (document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen().then(() => {
+      const m = document.getElementById('fullscreen-lock-modal');
+      if (m) m.remove();
+      enableKeyboardLock();
+    }).catch(err => {
+      console.warn('Could not re-enter fullscreen:', err);
+      showToast('Please allow fullscreen mode to resume your exam.', 'error');
+    });
+  }
+};
 
 async function logViolation(type, details) {
   if (!examState.proctorExamId) return;
@@ -970,6 +1101,14 @@ function cleanupProctoring() {
     examState.heartbeatInterval = null;
   }
 
+  // 1. Release Chrome Keyboard Lock
+  disableKeyboardLock();
+
+  // 2. Remove navigation & unload locks
+  window.removeEventListener('beforeunload', handleBeforeUnload);
+  window.removeEventListener('popstate',     handlePopState);
+
+  // 3. Remove event listeners
   document.removeEventListener('copy',             preventEvent);
   document.removeEventListener('cut',              preventEvent);
   document.removeEventListener('paste',            preventEvent);
@@ -979,6 +1118,12 @@ function cleanupProctoring() {
   document.removeEventListener('visibilitychange', handleVisibilityChange);
   window.removeEventListener('blur',               handleBlur);
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
+
+  // Remove any remaining lock modals
+  const lockModal = document.getElementById('fullscreen-lock-modal');
+  if (lockModal) lockModal.remove();
+  const violationModal = document.getElementById('violation-freeze-overlay');
+  if (violationModal) violationModal.remove();
 
   if (examState.extensionObserver) {
     try { examState.extensionObserver.disconnect(); } catch {}

@@ -193,6 +193,16 @@ function isGoogleChrome() {
   return true;
 }
 
+function isMacOS() {
+  const platform = navigator.userAgentData?.platform || navigator.platform || '';
+  const ua = navigator.userAgent || '';
+  return /Macintosh|MacIntel|MacPPC|Mac68K|macOS/i.test(platform) || /Mac OS X/i.test(ua);
+}
+
+function isMacChrome() {
+  return isMacOS() && isGoogleChrome();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROLE MODULE LOADER (2.1)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -964,6 +974,8 @@ window.formatCodeBlock = formatCodeBlock;
 window.setupCodeTextarea = setupCodeTextarea;
 window.sanitizeAndProtectStudentInputs = sanitizeAndProtectStudentInputs;
 window.isGoogleChrome = isGoogleChrome;
+window.isMacOS = isMacOS;
+window.isMacChrome = isMacChrome;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INIT & CONNECTIVITY

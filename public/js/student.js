@@ -1448,47 +1448,56 @@ function clearSampleCase() {
 }
 
 function extractFunctionNameFromQuestion(question) {
-  if (!question) return { pyName: 'solution', jsName: 'solution', args: 'input_data' };
+  if (!question) return { pyName: 'solve', jsName: 'solve', args: 'input_data', hasClass: false, className: 'Solution' };
 
   const content = String(question.content || question.question || '');
   const modelAnswer = String(question.correct_answer || '');
+  const fullText = content + '\n' + modelAnswer;
+
+  // Check if class structure is mentioned in question or solution
+  const classMatch = fullText.match(/class\s+([a-zA-Z0-9_]+)/);
+  const hasClass = !!classMatch;
+  const className = classMatch ? classMatch[1] : 'Solution';
 
   // 1. Look for explicit Python function declaration in model answer or question content
-  const defMatch = modelAnswer.match(/def\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/) ||
-                   content.match(/def\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/);
+  const defMatch = fullText.match(/def\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/);
   if (defMatch) {
     const pyName = defMatch[1];
-    const rawArgs = defMatch[2].trim() || 'input_data';
+    let rawArgs = defMatch[2].trim();
+    // Strip 'self' if present in class method signature
+    rawArgs = rawArgs.replace(/^self\s*,?\s*/, '').trim() || 'input_data';
     const jsName = pyName.replace(/_([a-z0-9])/g, (_, g) => g.toUpperCase());
-    return { pyName, jsName, args: rawArgs };
+    return { pyName, jsName, args: rawArgs, hasClass, className };
   }
 
   // 2. Look for JS function declaration in model answer or question content
-  const jsMatch = modelAnswer.match(/function\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/) ||
-                  content.match(/function\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/);
+  const jsMatch = fullText.match(/function\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/);
   if (jsMatch) {
     const jsName = jsMatch[1];
     const rawArgs = jsMatch[2].trim() || 'input_data';
     const pyName = jsName.replace(/([A-Z])/g, '_$1').toLowerCase();
-    return { pyName, jsName, args: rawArgs };
+    return { pyName, jsName, args: rawArgs, hasClass, className };
   }
 
-  // 3. Derive clean function name from title / first heading
-  const lines = content.split('\n');
-  let title = lines[0].replace(/^[#\s*\-:]+/, '').trim();
-  if (title.length > 60) title = title.substring(0, 60);
+  // 3. Derive clean function name from question text (filtering stop words FIRST)
+  const stopWords = new Set([
+    'write', 'a', 'an', 'the', 'program', 'function', 'method', 'class', 'code',
+    'to', 'in', 'given', 'for', 'of', 'is', 'if', 'that', 'with', 'by', 'from',
+    'using', 'return', 'returns', 'calculate', 'compute', 'find', 'determine',
+    'check', 'create', 'implement', 'print', 'output', 'input', 'value', 'data'
+  ]);
 
-  const words = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
-  if (words.length > 0) {
-    const cleanWords = words.slice(0, 3).filter(w => !['write', 'a', 'the', 'program', 'function', 'to', 'in', 'code', 'given', 'for', 'of'].includes(w));
-    if (cleanWords.length > 0) {
-      const pyName = cleanWords.join('_');
-      const jsName = cleanWords[0] + cleanWords.slice(1).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
-      return { pyName, jsName, args: 'input_data' };
-    }
+  const allWords = content.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const meaningfulWords = allWords.filter(w => !stopWords.has(w) && w.length > 1);
+
+  if (meaningfulWords.length > 0) {
+    const selected = meaningfulWords.slice(0, 3);
+    const pyName = selected.join('_');
+    const jsName = selected[0] + selected.slice(1).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+    return { pyName, jsName, args: 'input_data', hasClass, className };
   }
 
-  return { pyName: 'solution', jsName: 'solution', args: 'input_data' };
+  return { pyName: 'solve', jsName: 'solve', args: 'input_data', hasClass, className };
 }
 
 function getQuestionStarterTemplate(question, language = 'python') {

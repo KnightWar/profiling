@@ -83,20 +83,21 @@ Output Format: Return a raw JSON array of objects with this EXACT structure:
     "type": "programming",
     "marks": 5,
     "difficulty": "${diff}",
-    "content": "### Problem Description\\nState the problem clearly with background, schema/tables (if SQL) or file structure (if Bash), and objectives.\\n\\n### Input / Schema Format\\nDescribe input arguments, schema, or stdin format.\\n\\n### Output Format\\nDescribe expected return value, tabular result, or stdout.\\n\\n### Constraints\\n- Time Complexity: O(...)\\n- Edge cases to consider\\n\\n### Example 1\\n**Input:** ...\\n**Output:** ...\\n**Explanation:** ...\\n\\n### Example 2\\n**Input:** ...\\n**Output:** ...",
-    "correct_answer": "Clean, syntactically correct, optimized reference solution (Python function, SQL query, or Bash command)",
+    "content": "### Problem Description\\nState the problem clearly with background and objectives.\\n\\n### Function Signature\\n```python\\ndef <specific_descriptive_function_name>(...):\\n```\\n\\n### Input Format\\nDescribe input arguments or stdin.\\n\\n### Output Format\\nDescribe expected return value or stdout.\\n\\n### Constraints\\n- Edge cases to consider\\n\\n### Example 1\\n**Input:** ...\\n**Output:** ...\\n**Explanation:** ...\\n\\n### Example 2\\n**Input:** ...\\n**Output:** ...",
+    "correct_answer": "Clean, syntactically correct, optimized reference solution implementing def <specific_descriptive_function_name>(...) or SQL query / Bash command",
     "test_cases": [
-      { "input": "sample_input_or_sql_ddl_1", "expected": "sample_output_1" },
-      { "input": "sample_input_or_sql_ddl_2", "expected": "sample_output_2" },
-      { "input": "sample_input_or_sql_ddl_3", "expected": "sample_output_3" }
+      { "input": "sample_input_1", "expected": "sample_output_1" },
+      { "input": "sample_input_2", "expected": "sample_output_2" },
+      { "input": "sample_input_3", "expected": "sample_output_3" }
     ]
   }
 ]
 
 Strict Rules:
 - Return ONLY the JSON array.
-- "content" MUST use clean Markdown with Problem Description, Input/Output/Schema Format, Constraints, and Examples.
-- "correct_answer" MUST contain clean, valid, syntactically correct code in the requested domain (SQL, Bash, Python, JavaScript, C, etc.) with proper indentation. Escape quotes and newlines properly (\\\\n).
+- For programming questions, use a descriptive function name matching the exact problem (e.g., is_palindrome, two_sum, count_vowels, reverse_string, find_max). Do NOT use generic names like 'solution'.
+- "content" MUST use clean Markdown with Problem Description, Function Signature, Input/Output Format, Constraints, and Examples.
+- "correct_answer" MUST contain clean, valid, syntactically correct code with proper indentation. Escape quotes and newlines properly (\\\\n).
 - Provide at least 3 concrete test cases in "test_cases".`,
 
     sql: (topic, desc, count, diff) => `You are a database engineer and SQL assessment problem setter (LeetCode SQL / HackerRank SQL).

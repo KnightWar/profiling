@@ -197,33 +197,33 @@ function isBoilerplateOrEmptyCode(code) {
   // Extremely short or empty after comment removal
   if (clean.length < 5) return true;
 
-  // Check for trivial Python patterns with no actual logic:
+  // Check for trivial Python patterns with no actual logic (for any function name):
   const trivialPython = [
-    /^def solution\s*\([^)]*\)\s*:\s*(return\s*[a-zA-Z0-9_]*|pass)\s*(if __name__.*)?$/i,
-    /^def solution\s*\([^)]*\)\s*:\s*pass\s*$/i,
-    /^def solution\s*\([^)]*\)\s*:\s*return\s*$/i,
-    /^def solution\s*\([^)]*\)\s*:\s*return\s+(None|input_data|input|s|data|arr|num|n)\s*(if __name__.*)?$/i,
+    /^def\s+[a-zA-Z0-9_]+\s*\([^)]*\)\s*:\s*(return\s*[a-zA-Z0-9_]*|pass)\s*(if __name__.*)?$/i,
+    /^def\s+[a-zA-Z0-9_]+\s*\([^)]*\)\s*:\s*pass\s*$/i,
+    /^def\s+[a-zA-Z0-9_]+\s*\([^)]*\)\s*:\s*return\s*$/i,
+    /^def\s+[a-zA-Z0-9_]+\s*\([^)]*\)\s*:\s*return\s+(None|null|""|''|0|input_data|input|s|data|arr|num|n|nums|target|val)\s*(if __name__.*)?$/i,
     /^pass$/i,
-    /^return$/i,
+    /^return\s*[a-zA-Z0-9_]*;?$/i,
   ];
 
   for (const pattern of trivialPython) {
     if (pattern.test(clean)) return true;
   }
 
-  // Check for trivial JS patterns:
+  // Check for trivial JS patterns (for any function name):
   const trivialJS = [
-    /^function solution\s*\([^)]*\)\s*\{\s*(return\s*[a-zA-Z0-9_]*;?|;?)\s*\}\s*(const input.*)?$/i,
-    /^function solution\s*\([^)]*\)\s*\{\s*return\s+(inputData|input|undefined|null|"");?\s*\}\s*(const input.*)?$/i,
+    /^(function\s+[a-zA-Z0-9_]+|const\s+[a-zA-Z0-9_]+\s*=\s*(function|\([^)]*\)\s*=>))\s*\([^)]*\)\s*\{\s*(return\s*[a-zA-Z0-9_]*;?|;?)\s*\}\s*(const input.*)?$/i,
+    /^(function\s+[a-zA-Z0-9_]+|const\s+[a-zA-Z0-9_]+\s*=\s*(function|\([^)]*\)\s*=>))\s*\([^)]*\)\s*\{\s*return\s+(inputData|input|undefined|null|""|''|0|s|data|arr|num|n);?\s*\}\s*(const input.*)?$/i,
   ];
 
   for (const pattern of trivialJS) {
     if (pattern.test(clean)) return true;
   }
 
-  // Check for trivial C / C++ patterns:
+  // Check for trivial C / C++ patterns (for any function name):
   const trivialC = [
-    /^(char\*|string|int|void)\s+solution\s*\([^)]*\)\s*\{\s*return\s+[a-zA-Z0-9_"]*;\s*\}\s*(int main.*)?$/i,
+    /^(char\*|string|int|void|bool|float|double)\s+[a-zA-Z0-9_]+\s*\([^)]*\)\s*\{\s*return\s+[a-zA-Z0-9_"]*;\s*\}\s*(int main.*)?$/i,
   ];
   for (const pattern of trivialC) {
     if (pattern.test(clean)) return true;

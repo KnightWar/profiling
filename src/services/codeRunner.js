@@ -17,10 +17,151 @@ const { v4: uuidv4 } = require('uuid');
 const DEFAULT_TIMEOUT_MS = 5000;
 const MAX_OUTPUT_BYTES = 512 * 1024; // 512 KB
 
+function extractFunctionNameFromQuestion(question) {
+  if (!question) return { pyName: 'solution', jsName: 'solution', args: 'input_data' };
+
+  const content = String(question.content || question.question || '');
+  const modelAnswer = String(question.correct_answer || '');
+
+  // 1. Look for explicit Python function declaration in model answer or question content
+  const defMatch = modelAnswer.match(/def\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/) ||
+                   content.match(/def\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/);
+  if (defMatch) {
+    const pyName = defMatch[1];
+    const rawArgs = defMatch[2].trim() || 'input_data';
+    const jsName = pyName.replace(/_([a-z0-9])/g, (_, g) => g.toUpperCase());
+    return { pyName, jsName, args: rawArgs };
+  }
+
+  // 2. Look for JS function declaration in model answer or question content
+  const jsMatch = modelAnswer.match(/function\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/) ||
+                  content.match(/function\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/);
+  if (jsMatch) {
+    const jsName = jsMatch[1];
+    const rawArgs = jsMatch[2].trim() || 'input_data';
+    const pyName = jsName.replace(/([A-Z])/g, '_$1').toLowerCase();
+    return { pyName, jsName, args: rawArgs };
+  }
+
+  // 3. Derive clean function name from title / first heading
+  const lines = content.split('\n');
+  let title = lines[0].replace(/^[#\s*\-:]+/, '').trim();
+  if (title.length > 60) title = title.substring(0, 60);
+
+  const words = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
+  if (words.length > 0) {
+    const cleanWords = words.slice(0, 3).filter(w => !['write', 'a', 'the', 'program', 'function', 'to', 'in', 'code', 'given', 'for', 'of'].includes(w));
+    if (cleanWords.length > 0) {
+      const pyName = cleanWords.join('_');
+      const jsName = cleanWords[0] + cleanWords.slice(1).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+      return { pyName, jsName, args: 'input_data' };
+    }
+  }
+
+  return { pyName: 'solution', jsName: 'solution', args: 'input_data' };
+}
+
+function getQuestionStarterTemplate(question, language = 'python') {
+  const { pyName, jsName, args } = extractFunctionNameFromQuestion(question);
+  const lang = (language || 'python').toLowerCase();
+
+  if (lang === 'python') {
+    return `def ${pyName}(${args}):
+    # Write your solution logic here
+    pass
+
+if __name__ == '__main__':
+    import sys
+    input_data = sys.stdin.read().strip()
+    result = ${pyName}(input_data)
+    if result is not None:
+        print(result)`;
+  }
+
+  if (lang === 'javascript') {
+    return `function ${jsName}(${args}) {
+    // Write your solution logic here
+    return null;
+}
+
+const inputData = typeof readline === 'function' ? readline() : '';
+const result = ${jsName}(inputData);
+if (result !== undefined && result !== null) {
+    console.log(result);
+}`;
+  }
+
+  if (lang === 'c') {
+    return `#include <stdio.h>
+#include <string.h>
+
+char* ${pyName}(char* input) {
+    // Write your solution logic here
+    return NULL;
+}
+
+int main() {
+    char input[1024] = "";
+    if (scanf("%1023s", input) == 1) {
+        printf("%s\\n", ${pyName}(input));
+    }
+    return 0;
+}`;
+  }
+
+  if (lang === 'cpp') {
+    return `#include <iostream>
+#include <string>
+using namespace std;
+
+string ${pyName}(string input) {
+    // Write your solution logic here
+    return "";
+}
+
+int main() {
+    string input;
+    if (cin >> input) {
+        cout << ${pyName}(input) << endl;
+    }
+    return 0;
+}`;
+  }
+
+  if (lang === 'sql') {
+    return `-- Write your SQL query below (SELECT, JOIN, GROUP BY, Subqueries, etc.)
+SELECT 
+    * 
+FROM 
+    your_table;`;
+  }
+
+  if (lang === 'bash') {
+    return `#!/usr/bin/env bash
+# Write your command or pipeline below
+`;
+  }
+
+  if (lang === 'html_css') {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Solution</title>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>`;
+  }
+
+  return `def ${pyName}(${args}):\n    pass`;
+}
+
 const LANGUAGE_STARTERS = {
   python: `def solution(input_data):
     # Write your solution logic here
-    return input_data
+    pass
 
 if __name__ == '__main__':
     import sys
@@ -31,12 +172,12 @@ if __name__ == '__main__':
 
   javascript: `function solution(inputData) {
     // Write your solution logic here
-    return inputData;
+    return null;
 }
 
 const input = typeof readline === 'function' ? readline() : '';
 const result = solution(input);
-if (result !== undefined) {
+if (result !== undefined && result !== null) {
     console.log(result);
 }`,
 
@@ -48,23 +189,20 @@ FROM
 
   bash: `#!/usr/bin/env bash
 # Write your shell command or pipeline below
-# Example: grep -i "error" | awk '{print $1, $3}'
 
-cat`,
+`,
 
   c: `#include <stdio.h>
 #include <string.h>
 
 char* solution(char* input) {
     // Write your solution logic here
-    return input;
+    return NULL;
 }
 
 int main() {
     char input[1024] = "";
     if (scanf("%1023s", input) == 1) {
-        printf("%s\\n", solution(input));
-    } else {
         printf("%s\\n", solution(input));
     }
     return 0;
@@ -76,15 +214,13 @@ using namespace std;
 
 string solution(string input) {
     // Write your solution logic here
-    return input;
+    return "";
 }
 
 int main() {
     string input;
     if (cin >> input) {
         cout << solution(input) << endl;
-    } else {
-        cout << solution("") << endl;
     }
     return 0;
 }`,
@@ -172,6 +308,31 @@ function executeJavaScriptInVm(code, input = '', timeout = DEFAULT_TIMEOUT_MS) {
   try {
     const context = vm.createContext(sandbox);
     vm.runInContext(code, context, { timeout });
+
+    // If no stdout was produced and a function was declared, auto-invoke the declared function with input
+    if (!stdout.trim()) {
+      const fnMatch = code.match(/function\s+([a-zA-Z0-9_]+)\s*\(/) ||
+                      code.match(/(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*(?:function|\([^)]*\)\s*=>)/);
+      if (fnMatch) {
+        const fnName = fnMatch[1];
+        const invokeCode = `
+          if (typeof ${fnName} === 'function') {
+            try {
+              const __rawIn = ${JSON.stringify(input || '')};
+              let __arg = __rawIn;
+              try {
+                const __parsed = JSON.parse(__rawIn);
+                if (__parsed !== undefined) __arg = __parsed;
+              } catch(e) {}
+              const __res = Array.isArray(__arg) && ${fnName}.length > 1 ? ${fnName}(...__arg) : ${fnName}(__arg);
+              if (__res !== undefined && __res !== null) console.log(__res);
+            } catch(e) {}
+          }
+        `;
+        vm.runInContext(invokeCode, context, { timeout: Math.max(1000, timeout - (Date.now() - startTime)) });
+      }
+    }
+
     return {
       stdout: stdout.trimEnd(),
       stderr: stderr.trimEnd(),
@@ -498,6 +659,36 @@ async function executeCode({ code, language = 'python', input = '', timeout = DE
   }
 
   // Python execution
+  let pythonExecutableCode = code;
+  const defMatch = code.match(/^def\s+([a-zA-Z0-9_]+)\s*\(/m);
+  if (defMatch && !code.includes('if __name__') && !code.includes('print(')) {
+    const fnName = defMatch[1];
+    pythonExecutableCode += `\n
+if __name__ == '__main__':
+    import sys, json
+    try:
+        _raw = sys.stdin.read().strip()
+        _arg = _raw
+        try:
+            _parsed = json.loads(_raw)
+            if _parsed is not None:
+                _arg = _parsed
+        except Exception:
+            pass
+        if isinstance(_arg, list):
+            try:
+                _res = ${fnName}(*_arg)
+            except TypeError:
+                _res = ${fnName}(_arg)
+        else:
+            _res = ${fnName}(_arg)
+        if _res is not None:
+            print(_res)
+    except Exception:
+        pass
+`;
+  }
+
   const tempDir = os.tmpdir();
   const tempFile = path.join(tempDir, `exec_${uuidv4()}.py`);
 
@@ -515,7 +706,7 @@ async function executeCode({ code, language = 'python', input = '', timeout = DE
     };
 
     try {
-      fs.writeFileSync(tempFile, code, 'utf8');
+      fs.writeFileSync(tempFile, pythonExecutableCode, 'utf8');
     } catch (err) {
       return resolve(executePythonInVm(code, input, timeout));
     }
@@ -655,6 +846,8 @@ async function runTestCases({ code, language = 'python', testCases = [], timeout
 
 module.exports = {
   LANGUAGE_STARTERS,
+  extractFunctionNameFromQuestion,
+  getQuestionStarterTemplate,
   detectLanguage,
   executeCode,
   runTestCases,

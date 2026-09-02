@@ -380,7 +380,7 @@ function buildQuestionCard(examId) {
         data-ai="false" data-ai-assist="false" data-no-ai="true"
         data-dashlane-rm="true" data-1p-ignore="true" data-lpignore="true" data-form-type="other"
         style="width: 100%; border: none; background: transparent; color: #f0f6fc; font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; font-size: 0.92rem; line-height: 1.6; padding: 14px 16px; tab-size: 4; resize: vertical; outline: none; white-space: pre;"
-      >${escapeHtml(currentAnswer || `def solution(input_data):\n    # Write your solution logic here\n    return input_data\n\nif __name__ == '__main__':\n    import sys\n    input_str = sys.stdin.read().strip()\n    result = solution(input_str)\n    if result is not None:\n        print(result)`)}</textarea>
+      >${escapeHtml(currentAnswer || getQuestionStarterTemplate(q, 'python'))}</textarea>
     </div>
 
     <!-- Interactive Code Runner Workbench -->
@@ -1434,26 +1434,154 @@ function clearSampleCase() {
   showToast('Test inputs cleared for custom entry', 'info');
 }
 
-const STUDENT_LANGUAGE_STARTERS = {
-  python: `def solution(input_data):\n    # Write your solution logic here\n    return input_data\n\nif __name__ == '__main__':\n    import sys\n    input_str = sys.stdin.read().strip()\n    result = solution(input_str)\n    if result is not None:\n        print(result)`,
+function extractFunctionNameFromQuestion(question) {
+  if (!question) return { pyName: 'solution', jsName: 'solution', args: 'input_data' };
 
-  javascript: `function solution(inputData) {\n    // Write your solution logic here\n    return inputData;\n}\n\nconst input = typeof readline === 'function' ? readline() : '';\nconst result = solution(input);\nif (result !== undefined) {\n    console.log(result);\n}`,
+  const content = String(question.content || question.question || '');
+  const modelAnswer = String(question.correct_answer || '');
 
-  sql: `-- Write your SQL query below (SELECT, JOIN, GROUP BY, Subqueries, etc.)\nSELECT \n    * \nFROM \n    your_table;`,
+  // 1. Look for explicit Python function declaration in model answer or question content
+  const defMatch = modelAnswer.match(/def\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/) ||
+                   content.match(/def\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/);
+  if (defMatch) {
+    const pyName = defMatch[1];
+    const rawArgs = defMatch[2].trim() || 'input_data';
+    const jsName = pyName.replace(/_([a-z0-9])/g, (_, g) => g.toUpperCase());
+    return { pyName, jsName, args: rawArgs };
+  }
 
-  bash: `#!/usr/bin/env bash\n# Write your shell command or pipeline below\n# Example: grep -i "error" | awk '{print $1, $3}'\n\ncat`,
+  // 2. Look for JS function declaration in model answer or question content
+  const jsMatch = modelAnswer.match(/function\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/) ||
+                  content.match(/function\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/);
+  if (jsMatch) {
+    const jsName = jsMatch[1];
+    const rawArgs = jsMatch[2].trim() || 'input_data';
+    const pyName = jsName.replace(/([A-Z])/g, '_$1').toLowerCase();
+    return { pyName, jsName, args: rawArgs };
+  }
 
-  c: `#include <stdio.h>\n#include <string.h>\n\nchar* solution(char* input) {\n    // Write your solution logic here\n    return input;\n}\n\nint main() {\n    char input[1024] = "";\n    if (scanf("%1023s", input) == 1) {\n        printf("%s\\n", solution(input));\n    } else {\n        printf("%s\\n", solution(input));\n    }\n    return 0;\n}`,
+  // 3. Derive clean function name from title / first heading
+  const lines = content.split('\n');
+  let title = lines[0].replace(/^[#\s*\-:]+/, '').trim();
+  if (title.length > 60) title = title.substring(0, 60);
 
-  cpp: `#include <iostream>\n#include <string>\nusing namespace std;\n\nstring solution(string input) {\n    // Write your solution logic here\n    return input;\n}\n\nint main() {\n    string input;\n    if (cin >> input) {\n        cout << solution(input) << endl;\n    } else {\n        cout << solution("") << endl;\n    }\n    return 0;\n}`,
+  const words = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
+  if (words.length > 0) {
+    const cleanWords = words.slice(0, 3).filter(w => !['write', 'a', 'the', 'program', 'function', 'to', 'in', 'code', 'given', 'for', 'of'].includes(w));
+    if (cleanWords.length > 0) {
+      const pyName = cleanWords.join('_');
+      const jsName = cleanWords[0] + cleanWords.slice(1).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+      return { pyName, jsName, args: 'input_data' };
+    }
+  }
 
-  html_css: `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>Solution</title>\n    <style>\n        body {\n            font-family: sans-serif;\n            background: #0f172a;\n            color: #f8fafc;\n            padding: 20px;\n        }\n        .container {\n            color: #38bdf8;\n            font-size: 18px;\n        }\n    </style>\n</head>\n<body>\n    <div class="container">Hello World</div>\n</body>\n</html>`,
-};
+  return { pyName: 'solution', jsName: 'solution', args: 'input_data' };
+}
+
+function getQuestionStarterTemplate(question, language = 'python') {
+  const { pyName, jsName, args } = extractFunctionNameFromQuestion(question);
+  const lang = (language || 'python').toLowerCase();
+
+  if (lang === 'python') {
+    return `def ${pyName}(${args}):
+    # Write your solution logic here
+    pass
+
+if __name__ == '__main__':
+    import sys
+    input_data = sys.stdin.read().strip()
+    result = ${pyName}(input_data)
+    if result is not None:
+        print(result)`;
+  }
+
+  if (lang === 'javascript') {
+    return `function ${jsName}(${args}) {
+    // Write your solution logic here
+    return null;
+}
+
+const inputData = typeof readline === 'function' ? readline() : '';
+const result = ${jsName}(inputData);
+if (result !== undefined && result !== null) {
+    console.log(result);
+}`;
+  }
+
+  if (lang === 'c') {
+    return `#include <stdio.h>
+#include <string.h>
+
+char* ${pyName}(char* input) {
+    // Write your solution logic here
+    return NULL;
+}
+
+int main() {
+    char input[1024] = "";
+    if (scanf("%1023s", input) == 1) {
+        printf("%s\\n", ${pyName}(input));
+    }
+    return 0;
+}`;
+  }
+
+  if (lang === 'cpp') {
+    return `#include <iostream>
+#include <string>
+using namespace std;
+
+string ${pyName}(string input) {
+    // Write your solution logic here
+    return "";
+}
+
+int main() {
+    string input;
+    if (cin >> input) {
+        cout << ${pyName}(input) << endl;
+    }
+    return 0;
+}`;
+  }
+
+  if (lang === 'sql') {
+    return `-- Write your SQL query below (SELECT, JOIN, GROUP BY, Subqueries, etc.)
+SELECT 
+    * 
+FROM 
+    your_table;`;
+  }
+
+  if (lang === 'bash') {
+    return `#!/usr/bin/env bash
+# Write your command or pipeline below
+`;
+  }
+
+  if (lang === 'html_css') {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Solution</title>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>`;
+  }
+
+  return `def ${pyName}(${args}):\n    pass`;
+}
 
 function changeLanguageTemplate(questionId, lang, examId) {
   const inputEl = document.getElementById('answer-input');
   if (!inputEl) return;
-  const newCode = STUDENT_LANGUAGE_STARTERS[lang] || STUDENT_LANGUAGE_STARTERS.python;
+  const currentQ = examState.currentExam && examState.currentExam.questions 
+    ? examState.currentExam.questions.find(q => q.id === questionId) 
+    : null;
+  const newCode = getQuestionStarterTemplate(currentQ, lang);
   inputEl.value = newCode;
   autoSaveResponse(questionId, newCode, examId);
   showToast(`Language template switched to ${lang.toUpperCase()}`, 'info');

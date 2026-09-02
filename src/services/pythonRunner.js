@@ -69,6 +69,7 @@ function transpilePythonToJs(pyCode, rawInput = '') {
       const match = codeLine.match(/^def\s+([a-zA-Z0-9_]+)\s*\((.*?)\)\s*:/);
       const fnName = match[1];
       const args = match[2];
+      definedFnName = fnName;
       jsLines.push(`${' '.repeat(indent)}function ${fnName}(${args}) {`);
       indentStack.push(indent + 4);
       continue;
@@ -103,23 +104,35 @@ function transpilePythonToJs(pyCode, rawInput = '') {
       const match = codeLine.match(/^for\s+([a-zA-Z0-9_]+)\s+in\s+range\((.*?)\)\s*:/);
       const varName = match[1];
       const rangeArgs = match[2].split(',').map(s => s.trim());
-      let start = '0', end = '0', step = '1';
-      if (rangeArgs.length === 1) end = rangeArgs[0];
-      else if (rangeArgs.length >= 2) { start = rangeArgs[0]; end = rangeArgs[1]; if (rangeArgs[2]) step = rangeArgs[2]; }
-      jsLines.push(`${' '.repeat(indent)}for (let ${varName} = ${start}; ${varName} < ${end}; ${varName} += ${step}) {`);
+      let forLoop = '';
+      if (rangeArgs.length === 1) {
+        forLoop = `for (let ${varName} = 0; ${varName} < ${transformGeneralExpressions(rangeArgs[0])}; ${varName}++) {`;
+      } else if (rangeArgs.length === 2) {
+        forLoop = `for (let ${varName} = ${transformGeneralExpressions(rangeArgs[0])}; ${varName} < ${transformGeneralExpressions(rangeArgs[1])}; ${varName}++) {`;
+      } else {
+        forLoop = `for (let ${varName} = ${transformGeneralExpressions(rangeArgs[0])}; ${varName} < ${transformGeneralExpressions(rangeArgs[1])}; ${varName} += ${transformGeneralExpressions(rangeArgs[2])}) {`;
+      }
+      jsLines.push(`${' '.repeat(indent)}${forLoop}`);
       indentStack.push(indent + 4);
       continue;
     }
     if (/^for\s+([a-zA-Z0-9_]+)\s+in\s+(.*?)\s*:/.test(codeLine)) {
       const match = codeLine.match(/^for\s+([a-zA-Z0-9_]+)\s+in\s+(.*?)\s*:/);
-      const varName = match[1];
-      const iterable = match[2];
-      jsLines.push(`${' '.repeat(indent)}for (const ${varName} of (${iterable})) {`);
+      const itemVar = match[1];
+      const iterExpr = match[2];
+      jsLines.push(`${' '.repeat(indent)}for (const ${itemVar} of (${transformGeneralExpressions(iterExpr)} || [])) {`);
       indentStack.push(indent + 4);
       continue;
     }
 
-    // 6. Generic statement translations
+    // 6. Transform return statements
+    if (/^return\s*/.test(codeLine)) {
+      const expr = codeLine.replace(/^return\s*/, '').trim();
+      jsLines.push(`${' '.repeat(indent)}return ${transformGeneralExpressions(expr)};`);
+      continue;
+    }
+
+    // 7. Transform general expressions and assignments
     codeLine = transformGeneralExpressions(codeLine);
 
     // Auto-declare unassigned top-level variables if starting with var = ...
@@ -134,6 +147,25 @@ function transpilePythonToJs(pyCode, rawInput = '') {
   while (indentStack.length > 1) {
     indentStack.pop();
     jsLines.push('}');
+  }
+
+  if (definedFnName) {
+    jsLines.push(`
+if (typeof ${definedFnName} === 'function' && !__hasLoggedOutput) {
+  try {
+    const __raw = readAllInput();
+    let __arg = __raw;
+    try {
+      const __parsed = JSON.parse(__raw);
+      if (__parsed !== undefined) __arg = __parsed;
+    } catch(e) {}
+    const __res = Array.isArray(__arg) && ${definedFnName}.length > 1 ? ${definedFnName}(...__arg) : ${definedFnName}(__arg);
+    if (__res !== undefined && __res !== null && !__hasLoggedOutput) {
+      console.log(__res);
+    }
+  } catch(e) {}
+}
+`);
   }
 
   return jsLines.join('\n');
@@ -154,7 +186,7 @@ function transformCondition(cond) {
 }
 
 function transformGeneralExpressions(expr) {
-  return expr
+  let res = expr
     .replace(/\bsys\.stdin\.read\(\)\.strip\(\)/g, 'readAllInput()')
     .replace(/\bsys\.stdin\.read\(\)/g, 'readAllInput()')
     .replace(/\bsys\.stdin\.readline\(\)/g, 'readline()')
@@ -173,7 +205,19 @@ function transformGeneralExpressions(expr) {
     .replace(/\.strip\(\)/g, '.trim()')
     .replace(/\.append\((.*?)\)/g, '.push($1)')
     .replace(/\.lower\(\)/g, '.toLowerCase()')
-    .replace(/\.upper\(\)/g, '.toUpperCase()');
+    .replace(/\.upper\(\)/g, '.toUpperCase()')
+    .replace(/([a-zA-Z0-9_]+)\[::-1\]/g, 'Array.from($1).reverse().join("")');
+
+  // Transform Python inline ternary: (expr1) if (cond) else (expr2)
+  const ternaryMatch = res.match(/^(.+?)\s+if\s+(.+?)\s+else\s+(.+)$/);
+  if (ternaryMatch) {
+    const val1 = ternaryMatch[1].trim();
+    const cond = ternaryMatch[2].trim();
+    const val2 = ternaryMatch[3].trim();
+    res = `(${transformCondition(cond)}) ? (${transformGeneralExpressions(val1)}) : (${transformGeneralExpressions(val2)})`;
+  }
+
+  return res;
 }
 
 /**
@@ -189,8 +233,10 @@ function runPythonInVm(code, input = '', timeout = 5000) {
   let lineIdx = 0;
 
   const sandbox = {
+    __hasLoggedOutput: false,
     console: {
       log: (...args) => {
+        sandbox.__hasLoggedOutput = true;
         stdout += args.map(a => {
           if (a === null) return 'None';
           if (a === true) return 'True';

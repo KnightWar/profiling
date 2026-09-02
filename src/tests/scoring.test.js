@@ -110,22 +110,40 @@ if __name__ == '__main__':
   // Correct SQL query gets full marks
   assert.equal(await gradeProgramming({ answer_data: 'SELECT name FROM dept WHERE id = 1;' }, sqlQuestion), 5);
 
-  // 8. Bash Command Writing grading
-  const bashQuestion = {
-    marks: 5,
+  // 9. Question-specific function name generation
+  const { getQuestionStarterTemplate, extractFunctionNameFromQuestion } = require('../services/codeRunner');
+  const palindromeQ = {
+    content: '### Palindrome Check\nWrite a function is_palindrome(s) that checks if a string is palindrome.',
+    correct_answer: 'def is_palindrome(s):\n    return s == s[::-1]',
+    marks: 10,
     test_cases: [
-      {
-        input: 'apple\nbanana\ncherry\navocado\n',
-        expected: 'apple\navocado',
-      },
+      { input: 'racecar', expected: 'true' },
+      { input: 'hello', expected: 'false' },
     ],
   };
 
-  // Bash starter gets 0 marks
-  assert.equal(await gradeProgramming({ answer_data: LANGUAGE_STARTERS.bash }, bashQuestion), 0);
-  // Incorrect bash gets 0 marks
-  assert.equal(await gradeProgramming({ answer_data: 'grep "z"' }, bashQuestion), 0);
-  // Correct bash gets full marks
-  assert.equal(await gradeProgramming({ answer_data: 'grep "^a"' }, bashQuestion), 5);
+  const extracted = extractFunctionNameFromQuestion(palindromeQ);
+  assert.equal(extracted.pyName, 'is_palindrome');
+  assert.equal(extracted.args, 's');
+
+  const pyStarter = getQuestionStarterTemplate(palindromeQ, 'python');
+  assert.match(pyStarter, /def is_palindrome\(s\):/);
+  assert.match(pyStarter, /pass/);
+  // Ensure starter does not contain the logic answer
+  assert.ok(!pyStarter.includes('s[::-1]'));
+
+  // 10. Student submitting untouched custom function starter template gets 0 marks
+  const customStarterScore = await gradeProgramming({ answer_data: pyStarter }, palindromeQ);
+  assert.equal(customStarterScore, 0, 'Untouched custom function starter should get 0 marks');
+
+  // 11. Student submitting wrong logic gets 0 marks
+  const customWrongScore = await gradeProgramming({ answer_data: 'def is_palindrome(s):\n    return "always_wrong"' }, palindromeQ);
+  assert.equal(customWrongScore, 0, 'Wrong logic should get 0 marks');
+
+  // 12. Student submitting correct logic with custom function name gets full marks
+  const customCorrectScore = await gradeProgramming({
+    answer_data: 'def is_palindrome(s):\n    return "true" if s == s[::-1] else "false"',
+  }, palindromeQ);
+  assert.equal(customCorrectScore, 10, 'Correct logic with matching function name should get full marks');
 });
 

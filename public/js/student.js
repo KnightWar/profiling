@@ -380,7 +380,17 @@ function buildQuestionCard(examId) {
         data-ai="false" data-ai-assist="false" data-no-ai="true"
         data-dashlane-rm="true" data-1p-ignore="true" data-lpignore="true" data-form-type="other"
         style="width: 100%; border: none; background: transparent; color: #f0f6fc; font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; font-size: 0.92rem; line-height: 1.6; padding: 14px 16px; tab-size: 4; resize: vertical; outline: none; white-space: pre;"
-      >${escapeHtml(currentAnswer || getQuestionStarterTemplate(q, 'python'))}</textarea>
+      >${escapeHtml((() => {
+        let val = currentAnswer;
+        if (!val || !val.trim() ||
+            val.includes('def solution(input_data)') ||
+            val.includes('function solution(inputData)') ||
+            val.includes('char* solution(char* input)') ||
+            val.includes('string solution(string input)')) {
+          val = getQuestionStarterTemplate(q, 'python');
+        }
+        return val;
+      })())}</textarea>
     </div>
 
     <!-- Interactive Code Runner Workbench -->

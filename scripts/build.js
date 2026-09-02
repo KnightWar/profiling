@@ -35,6 +35,9 @@ const entryPoints = [
 
 async function runBuild() {
   const isProd = process.env.NODE_ENV === 'production';
+  // Never emit sourcemaps in production (Vercel sets NODE_ENV=production)
+  // so esbuild does not produce .map output files that would otherwise be missing
+  const enableSourcemap = !isProd;
   const manifest = {};
   const precacheUrls = [];
   const combinedHash = crypto.createHash('md5');
@@ -58,7 +61,7 @@ async function runBuild() {
       minify: true,
       target: ['chrome90', 'firefox90', 'safari14'],
       write: false,
-      sourcemap: !isProd,
+      sourcemap: enableSourcemap,
     });
 
     for (const out of result.outputFiles) {

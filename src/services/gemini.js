@@ -83,7 +83,7 @@ Output Format: Return a raw JSON array of objects with this EXACT structure:
     "type": "programming",
     "marks": 5,
     "difficulty": "${diff}",
-    "content": "### Problem Description\\nState the problem clearly with background and objectives.\\n\\n### Function Signature\\n```python\\ndef <specific_descriptive_function_name>(...):\\n```\\n\\n### Input Format\\nDescribe input arguments or stdin.\\n\\n### Output Format\\nDescribe expected return value or stdout.\\n\\n### Constraints\\n- Edge cases to consider\\n\\n### Example 1\\n**Input:** ...\\n**Output:** ...\\n**Explanation:** ...\\n\\n### Example 2\\n**Input:** ...\\n**Output:** ...",
+    "content": "### Problem Description\\nState the problem clearly with background and objectives.\\n\\n### Function Signature\\n\`\`\`python\\ndef <specific_descriptive_function_name>(...):\\n\`\`\`\\n\\n### Input Format\\nDescribe input arguments or stdin.\\n\\n### Output Format\\nDescribe expected return value or stdout.\\n\\n### Constraints\\n- Edge cases to consider\\n\\n### Example 1\\n**Input:** ...\\n**Output:** ...\\n**Explanation:** ...\\n\\n### Example 2\\n**Input:** ...\\n**Output:** ...",
     "correct_answer": "Clean, syntactically correct, optimized reference solution implementing def <specific_descriptive_function_name>(...) or SQL query / Bash command",
     "test_cases": [
       { "input": "sample_input_1", "expected": "sample_output_1" },

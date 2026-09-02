@@ -26,6 +26,9 @@ function getPgPool() {
         rejectUnauthorized: false, // Required for Neon
       },
     });
+    _pgPool.on('error', (err) => {
+      console.error('[PG Pool Error]', err.message);
+    });
   }
   return _pgPool;
 }

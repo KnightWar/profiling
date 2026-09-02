@@ -40,14 +40,21 @@ let sessionStore;
 if (isPg) {
   const PgStore = require('connect-pg-simple')(session);
   const { Pool } = require('pg');
+  const sessionPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: parseInt(process.env.PG_POOL_MAX || '3', 10),
+    ssl: { rejectUnauthorized: false }
+  });
+  sessionPool.on('error', (err) => {
+    console.error('[Session Pool Error]', err.message);
+  });
   sessionStore = new PgStore({
-    pool: new Pool({
-      connectionString: process.env.DATABASE_URL,
-      max: parseInt(process.env.PG_POOL_MAX || '3', 10), // keep per-instance pool small on serverless
-      ssl: { rejectUnauthorized: false }
-    }),
+    pool: sessionPool,
     tableName: 'session',
     createTableIfMissing: true
+  });
+  sessionStore.on('error', (err) => {
+    console.error('[Session Store Error]', err.message);
   });
 } else {
   try {
@@ -108,20 +115,15 @@ let dbInitPromise = null;
 
 app.use(async (req, res, next) => {
   if (!isDbInitialized) {
-    if (!dbInitPromise) {
-      dbInitPromise = initDb()
-        .then(() => {
-          isDbInitialized = true;
-          return true;
-        })
-        .catch(err => {
-          dbInitPromise = null;
-          throw err;
-        });
-    }
     try {
+      if (!dbInitPromise) {
+        dbInitPromise = initDb().then(() => {
+          isDbInitialized = true;
+        });
+      }
       await dbInitPromise;
     } catch (err) {
+      dbInitPromise = null;
       console.error('[DB] Lazy initialization failed:', err);
       return res.status(500).json({ error: `Database initialization failed: ${err.message}` });
     }

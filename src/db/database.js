@@ -147,10 +147,14 @@ function getDb() {
 
 async function initDb() {
   if (isPg) {
-    const pool = getPgPool();
-    
     // Run Postgres migrations for existing databases before early return
     try { await pool.query("ALTER TABLE users ADD COLUMN login_authorized BOOLEAN DEFAULT false;"); } catch (e) {}
+    try { await pool.query("ALTER TABLE users ADD COLUMN active_session_id TEXT;"); } catch (e) {}
+    try { await pool.query("ALTER TABLE exam_sessions ADD COLUMN remarks TEXT;"); } catch (e) {}
+    try { await pool.query("ALTER TABLE exams ADD COLUMN access_code TEXT;"); } catch (e) {}
+    try { await pool.query("ALTER TABLE exams ADD COLUMN timer_enabled INTEGER DEFAULT 1;"); } catch (e) {}
+    try { await pool.query("ALTER TABLE exams ADD COLUMN access_code_expires_at TIMESTAMP;"); } catch (e) {}
+    try { await pool.query("ALTER TABLE exams ADD COLUMN start_time TIMESTAMP;"); } catch (e) {}
 
     // Quick check if schema is already applied to avoid 10+ second DDL execution on cold starts
     try {

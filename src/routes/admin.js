@@ -346,7 +346,7 @@ router.get('/students/:id/exams', async (req, res) => {
       LEFT JOIN exam_sessions es ON es.exam_id = e.id AND es.student_id = ?
       LEFT JOIN responses r ON r.exam_id = e.id AND r.student_id = ?
       LEFT JOIN scores s ON s.response_id = r.id
-      WHERE e.is_published = 1
+      WHERE e.is_published = 1 OR es.id IS NOT NULL
       GROUP BY e.id, e.exam_number, e.title, e.total_marks, c.id, c.name, c.display_name, es.status, es.started_at, es.submitted_at, es.remarks
       ORDER BY c.id ASC, e.exam_number ASC
     `).all(studentId, studentId);

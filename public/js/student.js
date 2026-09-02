@@ -385,12 +385,9 @@ function buildQuestionCard(examId) {
         style="width: 100%; border: none; background: transparent; color: #f0f6fc; font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; font-size: 0.92rem; line-height: 1.6; padding: 14px 16px; tab-size: 4; resize: vertical; outline: none; white-space: pre;"
       >${escapeHtml((() => {
         let val = currentAnswer;
-        if (!val || !val.trim() ||
-            val.includes('def solution(input_data)') ||
-            val.includes('function solution(inputData)') ||
-            val.includes('char* solution(char* input)') ||
-            val.includes('string solution(string input)')) {
+        if (isGenericSolutionCode(val)) {
           val = getQuestionStarterTemplate(q, 'python');
+          examState.responses[q.id] = val;
         }
         return val;
       })())}</textarea>
@@ -1445,6 +1442,16 @@ function clearSampleCase() {
   if (matchBanner) matchBanner.style.display = 'none';
 
   showToast('Test inputs cleared for custom entry', 'info');
+}
+
+function isGenericSolutionCode(val) {
+  if (!val || !val.trim()) return true;
+  return /def\s+solution\b/i.test(val) ||
+         /function\s+solution\b/i.test(val) ||
+         /char\*\s+solution\b/i.test(val) ||
+         /string\s+solution\b/i.test(val) ||
+         /def\s+solve\b/i.test(val) ||
+         /function\s+solve\b/i.test(val);
 }
 
 function extractFunctionNameFromQuestion(question) {

@@ -3,14 +3,13 @@
  * Processed by scripts/build.js into public/sw.js with asset manifests & versioning.
  */
 
-const CACHE_NAME = 'cas-cache-f97bf5be';
+const CACHE_NAME = 'cas-cache-a13d8585';
 
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/css/styles.css',
-  '/dist/manifest.json',
-    '/dist/core.a9482485.js',
+    '/dist/core.619ada29.js',
   '/dist/admin.2c32002f.js',
   '/dist/student.14529445.js',
   '/dist/evaluator.02b40dbb.js',
@@ -63,6 +62,22 @@ self.addEventListener('fetch', (event) => {
           }
         );
       })
+    );
+    return;
+  }
+
+  // 1.5. Dist Manifest — Network-first (always fetch fresh manifest so asset hashes update immediately)
+  if (url.pathname.endsWith('/manifest.json')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
     );
     return;
   }

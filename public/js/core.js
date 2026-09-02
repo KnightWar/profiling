@@ -212,7 +212,7 @@ let _distManifest = null;
 async function getDistManifest() {
   if (_distManifest) return _distManifest;
   try {
-    const res = await fetch('/dist/manifest.json', { cache: 'no-cache' });
+    const res = await fetch(`/dist/manifest.json?v=${Date.now()}`, { cache: 'no-cache' });
     if (res.ok) {
       _distManifest = await res.json();
     } else {

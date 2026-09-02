@@ -364,6 +364,9 @@ function buildQuestionCard(examId) {
           </select>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="resetQuestionStarterTemplate(${q.id}, ${examId})" style="padding:2px 8px; font-size:0.72rem; height:24px; background:#21262d; border-color:#30363d; color:#8b949e; cursor:pointer;" title="Reset editor to question starter template">
+            <i class="ph ph-arrow-counter-clockwise"></i> Reset Code
+          </button>
           <span class="badge badge-neutral" style="font-size:0.72rem;">Tab = 4 Spaces</span>
         </div>
       </div>
@@ -1597,6 +1600,20 @@ function changeLanguageTemplate(questionId, lang, examId) {
   showToast(`Language template switched to ${lang.toUpperCase()}`, 'info');
 }
 
+function resetQuestionStarterTemplate(questionId, examId) {
+  const langSelect = document.getElementById('code-lang-select');
+  const lang = langSelect ? langSelect.value : 'python';
+  const currentQ = examState.currentExam && examState.currentExam.questions 
+    ? examState.currentExam.questions.find(q => q.id === questionId) 
+    : null;
+  const inputEl = document.getElementById('answer-input');
+  if (!inputEl) return;
+  const newCode = getQuestionStarterTemplate(currentQ, lang);
+  inputEl.value = newCode;
+  autoSaveResponse(questionId, newCode, examId);
+  showToast('Reset to clean question starter template', 'info');
+}
+
 async function runStudentCode(questionId, examId, runTestCases = false) {
   const codeInput = document.getElementById('answer-input');
   const code = codeInput ? codeInput.value : (examState.responses[questionId] || '');
@@ -1717,6 +1734,7 @@ window.startOralRecording = startOralRecording;
 window.loadSampleCase = loadSampleCase;
 window.clearSampleCase = clearSampleCase;
 window.changeLanguageTemplate = changeLanguageTemplate;
+window.resetQuestionStarterTemplate = resetQuestionStarterTemplate;
 window.runStudentCode = runStudentCode;
 
 // ═══════════════════════════════════════════════════════════════════════════════

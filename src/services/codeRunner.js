@@ -18,19 +18,26 @@ const DEFAULT_TIMEOUT_MS = 5000;
 const MAX_OUTPUT_BYTES = 512 * 1024; // 512 KB
 
 function extractFunctionNameFromQuestion(question) {
-  if (!question) return { pyName: 'solution', jsName: 'solution', args: 'input_data' };
+  if (!question) return { pyName: 'solution', jsName: 'solution', args: 'input_data', hasClass: false, className: 'Solution' };
 
   const content = String(question.content || question.question || '');
   const modelAnswer = String(question.correct_answer || '');
+
+  // Check if class structure is mentioned in question or solution
+  const classMatch = modelAnswer.match(/class\s+([a-zA-Z0-9_]+)/) || content.match(/class\s+([a-zA-Z0-9_]+)/);
+  const hasClass = !!classMatch;
+  const className = classMatch ? classMatch[1] : 'Solution';
 
   // 1. Look for explicit Python function declaration in model answer or question content
   const defMatch = modelAnswer.match(/def\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/) ||
                    content.match(/def\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/);
   if (defMatch) {
     const pyName = defMatch[1];
-    const rawArgs = defMatch[2].trim() || 'input_data';
+    let rawArgs = defMatch[2].trim();
+    // Strip 'self' if present in class method signature
+    rawArgs = rawArgs.replace(/^self\s*,?\s*/, '').trim() || 'input_data';
     const jsName = pyName.replace(/_([a-z0-9])/g, (_, g) => g.toUpperCase());
-    return { pyName, jsName, args: rawArgs };
+    return { pyName, jsName, args: rawArgs, hasClass, className };
   }
 
   // 2. Look for JS function declaration in model answer or question content
@@ -40,7 +47,7 @@ function extractFunctionNameFromQuestion(question) {
     const jsName = jsMatch[1];
     const rawArgs = jsMatch[2].trim() || 'input_data';
     const pyName = jsName.replace(/([A-Z])/g, '_$1').toLowerCase();
-    return { pyName, jsName, args: rawArgs };
+    return { pyName, jsName, args: rawArgs, hasClass, className };
   }
 
   // 3. Derive clean function name from title / first heading
@@ -54,20 +61,34 @@ function extractFunctionNameFromQuestion(question) {
     if (cleanWords.length > 0) {
       const pyName = cleanWords.join('_');
       const jsName = cleanWords[0] + cleanWords.slice(1).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
-      return { pyName, jsName, args: 'input_data' };
+      return { pyName, jsName, args: 'input_data', hasClass, className };
     }
   }
 
-  return { pyName: 'solution', jsName: 'solution', args: 'input_data' };
+  return { pyName: 'solution', jsName: 'solution', args: 'input_data', hasClass: false, className: 'Solution' };
 }
 
 function getQuestionStarterTemplate(question, language = 'python') {
-  const { pyName, jsName, args } = extractFunctionNameFromQuestion(question);
+  const { pyName, jsName, args, hasClass, className } = extractFunctionNameFromQuestion(question);
   const lang = (language || 'python').toLowerCase();
 
   if (lang === 'python') {
+    if (hasClass) {
+      return `class ${className}:
+    def ${pyName}(self, ${args}):
+        # TODO: Implement your solution logic here
+        pass
+
+if __name__ == '__main__':
+    import sys
+    input_data = sys.stdin.read().strip()
+    solution = ${className}()
+    result = solution.${pyName}(input_data)
+    if result is not None:
+        print(result)`;
+    }
     return `def ${pyName}(${args}):
-    # Write your solution logic here
+    # TODO: Implement your solution logic here
     pass
 
 if __name__ == '__main__':
@@ -79,31 +100,43 @@ if __name__ == '__main__':
   }
 
   if (lang === 'javascript') {
-    return `function ${jsName}(${args}) {
-    // Write your solution logic here
+    return `/**
+ * Question Solution Harness: ${jsName}
+ * @param {any} ${args}
+ * @return {any}
+ */
+function ${jsName}(${args}) {
+    // TODO: Implement your solution logic here
     return null;
 }
 
+// Execution Wrapper
 const inputData = typeof readline === 'function' ? readline() : '';
 const result = ${jsName}(inputData);
 if (result !== undefined && result !== null) {
-    console.log(result);
+    console.log(typeof result === 'object' ? JSON.stringify(result) : result);
 }`;
   }
 
   if (lang === 'c') {
     return `#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-char* ${pyName}(char* input) {
-    // Write your solution logic here
+// Required Solution Function
+char* ${pyName}(const char* input_data) {
+    // TODO: Implement your solution logic here
     return NULL;
 }
 
 int main() {
-    char input[1024] = "";
-    if (scanf("%1023s", input) == 1) {
-        printf("%s\\n", ${pyName}(input));
+    char input_data[2048] = "";
+    if (fgets(input_data, sizeof(input_data), stdin)) {
+        input_data[strcspn(input_data, "\\r\\n")] = 0;
+        char* result = ${pyName}(input_data);
+        if (result != NULL) {
+            printf("%s\\n", result);
+        }
     }
     return 0;
 }`;
@@ -112,17 +145,24 @@ int main() {
   if (lang === 'cpp') {
     return `#include <iostream>
 #include <string>
+#include <vector>
+#include <algorithm>
+
 using namespace std;
 
-string ${pyName}(string input) {
-    // Write your solution logic here
-    return "";
-}
+class ${className} {
+public:
+    string ${pyName}(const string& input_data) {
+        // TODO: Implement your solution logic here
+        return "";
+    }
+};
 
 int main() {
-    string input;
-    if (cin >> input) {
-        cout << ${pyName}(input) << endl;
+    string input_data;
+    if (cin >> input_data) {
+        ${className} sol;
+        cout << sol.${pyName}(input_data) << endl;
     }
     return 0;
 }`;
@@ -130,6 +170,8 @@ int main() {
 
   if (lang === 'sql') {
     return `-- Write your SQL query below (SELECT, JOIN, GROUP BY, Subqueries, etc.)
+-- Table schemas and initial data are pre-configured in the question test cases
+
 SELECT 
     * 
 FROM 
@@ -138,7 +180,9 @@ FROM
 
   if (lang === 'bash') {
     return `#!/usr/bin/env bash
-# Write your command or pipeline below
+# Write your command pipeline / script below to process stdin and output result
+
+cat
 `;
   }
 

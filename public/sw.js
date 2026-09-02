@@ -3,7 +3,7 @@
  * Processed by scripts/build.js into public/sw.js with asset manifests & versioning.
  */
 
-const CACHE_NAME = 'cas-cache-b60656a6';
+const CACHE_NAME = 'cas-cache-69e0f5e9';
 
 const PRECACHE_ASSETS = [
   '/',
@@ -11,7 +11,7 @@ const PRECACHE_ASSETS = [
   '/css/styles.css',
   '/dist/manifest.json',
     '/dist/core.a9482485.js',
-  '/dist/admin.06516a8a.js',
+  '/dist/admin.7356b454.js',
   '/dist/student.bc8a1f93.js',
   '/dist/evaluator.02b40dbb.js',
 ];

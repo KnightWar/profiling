@@ -318,23 +318,86 @@ router.put('/students/:id', async (req, res) => {
   }
 });
 
-// ─── DELETE /api/admin/students/:id/exams ───────────────────────────────
-router.delete('/students/:id/exams', async (req, res) => {
+// ─── GET /api/admin/students/:id/exams ──────────────────────────────────────
+router.get('/students/:id/exams', async (req, res) => {
   const db = getDb();
-  const student = await db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(req.params.id);
+  const studentId = parseInt(req.params.id, 10);
+  const student = await db.prepare("SELECT id, name, email, roll_no FROM users WHERE id = ? AND role = 'student'").get(studentId);
   if (!student) return res.status(404).json({ error: 'Student not found' });
 
   try {
-    await db.prepare('DELETE FROM composite_scores WHERE student_id = ?').run(req.params.id);
-    await db.prepare('DELETE FROM component_totals WHERE student_id = ?').run(req.params.id);
-    await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(req.params.id);
-    await db.prepare('DELETE FROM responses WHERE student_id = ?').run(req.params.id);
-    await db.prepare('DELETE FROM exam_sessions WHERE student_id = ?').run(req.params.id);
-    await db.prepare('DELETE FROM violations WHERE student_id = ?').run(req.params.id);
-    // Reset active session ID just in case
-    await db.prepare('UPDATE users SET active_session_id = NULL WHERE id = ?').run(req.params.id);
+    const exams = await db.prepare(`
+      SELECT 
+        e.id as exam_id,
+        e.exam_number,
+        e.title as exam_title,
+        e.total_marks,
+        c.id as component_id,
+        c.name as component_name,
+        c.display_name as component_display_name,
+        es.status as session_status,
+        es.started_at,
+        es.submitted_at,
+        es.remarks,
+        COALESCE(SUM(s.marks_awarded), 0) as score,
+        COUNT(DISTINCT r.id) as responses_count
+      FROM exams e
+      JOIN components c ON c.id = e.component_id
+      LEFT JOIN exam_sessions es ON es.exam_id = e.id AND es.student_id = ?
+      LEFT JOIN responses r ON r.exam_id = e.id AND r.student_id = ?
+      LEFT JOIN scores s ON s.response_id = r.id
+      WHERE e.is_published = 1
+      GROUP BY e.id, e.exam_number, e.title, e.total_marks, c.id, c.name, c.display_name, es.status, es.started_at, es.submitted_at, es.remarks
+      ORDER BY c.id ASC, e.exam_number ASC
+    `).all(studentId, studentId);
 
-    res.json({ message: 'All exams and scores for this student have been reset.' });
+    res.json({ student, exams: exams || [] });
+  } catch (err) {
+    console.error('Fetch student exams error:', err);
+    res.status(500).json({ error: 'Failed to fetch student exams' });
+  }
+});
+
+// ─── DELETE /api/admin/students/:id/exams ───────────────────────────────
+router.delete('/students/:id/exams', async (req, res) => {
+  const db = getDb();
+  const studentId = parseInt(req.params.id, 10);
+  const student = await db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(studentId);
+  if (!student) return res.status(404).json({ error: 'Student not found' });
+
+  const rawExamId = req.query.exam_id || req.body?.exam_id;
+  const examId = (rawExamId && rawExamId !== 'all') ? parseInt(rawExamId, 10) : null;
+
+  try {
+    const { recomputeComponentTotal, recomputeComposite } = require('../services/scoring');
+
+    if (examId && !isNaN(examId)) {
+      // 1. Reset specific exam
+      const exam = await db.prepare('SELECT id, exam_number, title, component_id FROM exams WHERE id = ?').get(examId);
+      if (!exam) return res.status(404).json({ error: 'Exam not found' });
+
+      await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ? AND exam_id = ?)').run(studentId, examId);
+      await db.prepare('DELETE FROM responses WHERE student_id = ? AND exam_id = ?').run(studentId, examId);
+      await db.prepare('DELETE FROM exam_sessions WHERE student_id = ? AND exam_id = ?').run(studentId, examId);
+      await db.prepare('DELETE FROM violations WHERE student_id = ? AND exam_id = ?').run(studentId, examId);
+
+      // Recompute component totals for this component and composite score
+      await recomputeComponentTotal(studentId, exam.component_id);
+      await recomputeComposite(studentId);
+
+      res.json({ message: `Exam #${exam.exam_number} ("${exam.title}") has been reset for ${student.name}.` });
+    } else {
+      // 2. Reset all exams
+      await db.prepare('DELETE FROM composite_scores WHERE student_id = ?').run(studentId);
+      await db.prepare('DELETE FROM component_totals WHERE student_id = ?').run(studentId);
+      await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(studentId);
+      await db.prepare('DELETE FROM responses WHERE student_id = ?').run(studentId);
+      await db.prepare('DELETE FROM exam_sessions WHERE student_id = ?').run(studentId);
+      await db.prepare('DELETE FROM violations WHERE student_id = ?').run(studentId);
+      await db.prepare('UPDATE users SET active_session_id = NULL WHERE id = ?').run(studentId);
+
+      res.json({ message: `All exams and scores for ${student.name} have been reset.` });
+    }
   } catch (err) {
     console.error('Reset exams error:', err);
     res.status(500).json({ error: 'Failed to reset exams' });

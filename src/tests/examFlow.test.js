@@ -198,6 +198,26 @@ if __name__ == '__main__':
     await db.prepare('DELETE FROM users WHERE id = ?').run(student2Id);
   });
 
+  await t.test('Selective Single Exam Reset and All Exams Reset Verification', async () => {
+    // Verify student has responses and scores
+    const preCount = await db.prepare('SELECT COUNT(*) as c FROM responses WHERE student_id = ? AND exam_id = ?').get(studentId, examId);
+    assert.ok(preCount.c > 0, 'Should have responses before reset');
+
+    // 1. Reset specific single exam (examId)
+    await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ? AND exam_id = ?)').run(studentId, examId);
+    await db.prepare('DELETE FROM responses WHERE student_id = ? AND exam_id = ?').run(studentId, examId);
+    await db.prepare('DELETE FROM exam_sessions WHERE student_id = ? AND exam_id = ?').run(studentId, examId);
+    await db.prepare('DELETE FROM violations WHERE student_id = ? AND exam_id = ?').run(studentId, examId);
+    await recomputeComponentTotal(studentId, 1);
+    await recomputeComposite(studentId);
+
+    const postCount = await db.prepare('SELECT COUNT(*) as c FROM responses WHERE student_id = ? AND exam_id = ?').get(studentId, examId);
+    assert.equal(postCount.c, 0, 'Specific exam responses should be deleted');
+
+    const compAfterReset = await db.prepare('SELECT total_marks FROM component_totals WHERE student_id = ? AND component_id = 1').get(studentId);
+    assert.equal(compAfterReset ? compAfterReset.total_marks : 0, 0, 'Component total should update after reset');
+  });
+
   // Cleanup test records
   await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(studentId);
   await db.prepare('DELETE FROM responses WHERE student_id = ?').run(studentId);

@@ -660,36 +660,125 @@ async function deleteBatch(id) {
 
 async function editStudent(id) {
   try {
-    const data = await api('/api/admin/students?search=');
-    const student = data.students.find(s => s.id === id);
-    if (!student) return showToast('Student not found', 'error');
+    const data = await api(`/api/admin/students/${id}/exams`);
+    const student = data.student;
+    const exams = data.exams || [];
 
-    openModal('Reset Student Exams', `
-      <p style="margin-bottom: var(--sp-md); font-size: 1.1rem;">
-        Are you sure you want to discard all exams and scores for <strong>${escapeHtml(student.name)}</strong> (${escapeHtml(student.roll_no)})?
-      </p>
-      <div class="alert alert-warning">
-        <i class="ph ph-warning"></i> This action cannot be undone. All submitted answers, auto-grades, and manually reviewed scores will be permanently deleted for this student.
+    const attemptedExams = exams.filter(e => e.session_status || e.responses_count > 0);
+
+    let examOptionsHtml = '';
+    if (attemptedExams.length > 0) {
+      examOptionsHtml = attemptedExams.map((e, idx) => {
+        const scoreText = e.session_status === 'submitted' 
+          ? `Score: ${Math.round(e.score * 10) / 10} / ${e.total_marks}`
+          : (e.session_status ? `In Progress (${e.responses_count} answered)` : 'Attempted');
+        return `
+          <option value="${e.exam_id}" ${idx === 0 ? 'selected' : ''}>
+            [${escapeHtml(e.component_display_name || e.component_name)}] Exam #${e.exam_number}: ${escapeHtml(e.exam_title)} (${scoreText})
+          </option>
+        `;
+      }).join('');
+    } else {
+      examOptionsHtml = exams.map((e, idx) => `
+        <option value="${e.exam_id}" ${idx === 0 ? 'selected' : ''}>
+          [${escapeHtml(e.component_display_name || e.component_name)}] Exam #${e.exam_number}: ${escapeHtml(e.exam_title)} (${e.total_marks} marks)
+        </option>
+      `).join('');
+    }
+
+    openModal('Reset Student Exam(s)', `
+      <div style="margin-bottom: var(--sp-md);">
+        <p style="font-size: 1.05rem; margin-bottom: 0.5rem;">
+          Select reset options for <strong>${escapeHtml(student.name)}</strong> (${escapeHtml(student.roll_no || student.email)}):
+        </p>
+      </div>
+
+      <div class="card p-sm mb-md" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px;">
+        <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; margin-bottom:12px;">
+          <input type="radio" name="reset-scope" value="single" id="reset-scope-single" checked onchange="toggleResetScopeUI()" style="margin-top:4px;">
+          <div>
+            <strong style="color:var(--text-primary);">Reset Specific Exam Only (Recommended)</strong>
+            <p class="text-sm text-muted" style="margin:2px 0 0 0;">
+              Clears the student's attempt, submitted answers, and score for the selected exam. Other exams and composite scores will be automatically recalculated.
+            </p>
+          </div>
+        </label>
+
+        <div id="single-exam-select-container" style="margin-left: 26px; margin-bottom: 8px;">
+          <label class="form-label" style="font-size:0.82rem; font-weight:600;">Choose Exam to Reset:</label>
+          <select class="form-select" id="reset-selected-exam-id">
+            ${examOptionsHtml || '<option value="">No exams available</option>'}
+          </select>
+        </div>
+
+        <hr style="border:0; border-top:1px solid var(--border-color); margin:12px 0;">
+
+        <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;">
+          <input type="radio" name="reset-scope" value="all" id="reset-scope-all" onchange="toggleResetScopeUI()" style="margin-top:4px;">
+          <div>
+            <strong style="color:var(--accent-rose);">Reset ALL Exams & Scores</strong>
+            <p class="text-sm text-muted" style="margin:2px 0 0 0;">
+              Permanently wipes all exam submissions, scores, violations, and composite rank for this student across all components.
+            </p>
+          </div>
+        </label>
+      </div>
+
+      <div class="alert alert-warning" style="font-size:0.85rem;">
+        <i class="ph ph-warning"></i> This action cannot be undone. The student will be granted access to re-attempt the reset exam(s).
       </div>
     `, `
       <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-danger" onclick="submitResetStudentExams(${id})">Yes, Reset Exams</button>
+      <button class="btn btn-danger" id="btn-confirm-reset" onclick="submitResetStudentExams(${id})">
+        <i class="ph ph-arrows-clockwise"></i> Reset Selected Exam
+      </button>
     `);
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
 
+function toggleResetScopeUI() {
+  const isSingle = document.getElementById('reset-scope-single')?.checked;
+  const selectContainer = document.getElementById('single-exam-select-container');
+  const confirmBtn = document.getElementById('btn-confirm-reset');
+
+  if (selectContainer) {
+    selectContainer.style.display = isSingle ? 'block' : 'none';
+  }
+  if (confirmBtn) {
+    confirmBtn.innerHTML = isSingle 
+      ? '<i class="ph ph-arrows-clockwise"></i> Reset Selected Exam'
+      : '<i class="ph ph-warning"></i> Reset ALL Exams for Student';
+  }
+}
+
 async function submitResetStudentExams(id) {
+  const isSingle = document.getElementById('reset-scope-single')?.checked;
+  const examId = isSingle ? document.getElementById('reset-selected-exam-id')?.value : 'all';
+
+  if (isSingle && !examId) {
+    showToast('Please select an exam to reset', 'warning');
+    return;
+  }
+
+  const promptText = isSingle 
+    ? 'Are you sure you want to reset this exam for this student?' 
+    : 'Are you sure you want to completely wipe ALL exams and scores for this student?';
+
+  if (!confirm(promptText)) return;
+
   try {
-    await api(`/api/admin/students/${id}/exams`, { method: 'DELETE' });
+    const res = await api(`/api/admin/students/${id}/exams?exam_id=${encodeURIComponent(examId)}`, { method: 'DELETE' });
     closeModal();
-    showToast('Student exams have been reset', 'success');
+    showToast(res.message || 'Exam(s) reset successfully', 'success');
     renderStudentManager();
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
+
+window.toggleResetScopeUI = toggleResetScopeUI;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ADMIN: EXAM MANAGER

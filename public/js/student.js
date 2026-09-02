@@ -631,8 +631,12 @@ function startExamTimer(endsAt) {
 
     if (diff <= 0) {
       clearInterval(examState.timerInterval);
-      showToast('Time is up! Auto-submitting...', 'warning');
-      submitExam(examState.session.exam_id, true);
+      examState.timerInterval = null;
+      showToast('Time is up! Auto-submitting your exam...', 'warning');
+      const examId = examState.session ? examState.session.exam_id : examState.proctorExamId;
+      if (examId) {
+        submitExam(examId, true, 'Auto-submitted: Exam time expired', 'redirect_dashboard');
+      }
     }
   }, 1000);
 }
@@ -641,14 +645,17 @@ function startExamTimer(endsAt) {
 // EXAM SUBMISSION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function submitExam(examId, forceSubmit = false, remarks = null) {
+async function submitExam(examId, forceSubmit = false, remarks = null, postAction = 'redirect_dashboard') {
   if (!forceSubmit && !confirm('Submit this exam? You cannot change your answers after submission.')) return;
 
   try {
-    clearInterval(examState.timerInterval);
+    if (examState.timerInterval) {
+      clearInterval(examState.timerInterval);
+      examState.timerInterval = null;
+    }
     cleanupProctoring();
 
-    const responses = Object.entries(examState.responses).map(([qId, answer]) => ({
+    const responses = Object.entries(examState.responses || {}).map(([qId, answer]) => ({
       question_id: parseInt(qId),
       answer_data: answer,
     }));
@@ -662,14 +669,28 @@ async function submitExam(examId, forceSubmit = false, remarks = null) {
     });
 
     examState = { active: false, session: null, questions: [], responses: {}, timerInterval: null };
-    showToast(`Exam submitted! Logging you out...`, 'success');
-    
-    // Auto-logout after submission
-    setTimeout(() => {
-      handleLogout();
-    }, 2000);
+
+    if (postAction === 'violation_logout') {
+      showToast('Exam locked and auto-submitted due to violations. Logging you out...', 'error');
+      setTimeout(() => {
+        handleLogout('PROCTORING_VIOLATION_LOCKED');
+      }, 1500);
+    } else {
+      showToast('Exam submitted successfully!', 'success');
+      setTimeout(() => {
+        window.location.hash = '#/student/dashboard';
+        if (typeof renderStudentDashboard === 'function') {
+          renderStudentDashboard();
+        }
+      }, 600);
+    }
   } catch (err) {
     showToast(err.message, 'error');
+    if (err.message && err.message.toLowerCase().includes('already')) {
+      examState = { active: false, session: null, questions: [], responses: {}, timerInterval: null };
+      cleanupProctoring();
+      window.location.hash = '#/student/dashboard';
+    }
   }
 }
 
@@ -1069,24 +1090,29 @@ async function logViolation(type, details) {
     });
 
     if (examState.tabSwitches >= 3) {
-      showToast('Maximum violations exceeded. Auto-submitting exam...', 'error');
-      submitExam(examState.proctorExamId, true, 'Auto-submitted because of violations');
+      showToast('Maximum violations exceeded. Auto-submitting exam and logging out...', 'error');
+      const examId = examState.proctorExamId;
+      const remark = `Auto-submitted: Proctoring violation limit reached (${examState.tabSwitches} window/tab violations)`;
+      await submitExam(examId, true, remark, 'violation_logout');
     } else {
+      const existingOverlay = document.getElementById('violation-freeze-overlay');
+      if (existingOverlay) existingOverlay.remove();
+
       const overlay = document.createElement('div');
       overlay.id = 'violation-freeze-overlay';
-      overlay.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); color:white; z-index:9999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2rem; backdrop-filter: blur(10px);';
+      overlay.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.88); color:white; z-index:9999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2rem; backdrop-filter: blur(10px);';
       overlay.innerHTML = `
         <h1 style="color:var(--accent-rose); margin-bottom: 1rem;"><i class="ph ph-warning"></i> Warning: Exam Violation</h1>
         <p style="font-size:1.2rem; max-width: 500px; line-height: 1.5; margin-bottom: 1rem;">
           You have navigated away from the exam window, exited full screen, or switched tabs. This is a violation of exam rules.
         </p>
-        <p style="font-size:1.2rem; max-width: 500px; line-height: 1.5; margin-bottom: 2rem; font-weight:bold;">
+        <p style="font-size:1.2rem; max-width: 500px; line-height: 1.5; margin-bottom: 2rem; font-weight:bold; color:var(--accent-rose);">
           Violation ${examState.tabSwitches} of 3.
         </p>
         <p style="margin-bottom: 2rem; color:#ccc;">
-          On the 3rd violation, your exam will be automatically submitted and locked.
+          On the 3rd violation, your exam will be automatically submitted with an incident remark and you will be logged out.
         </p>
-        <button class="btn btn-primary" onclick="document.getElementById('violation-freeze-overlay').remove(); if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(e=>console.warn(e));">I Understand, Return to Exam</button>
+        <button class="btn btn-primary btn-lg" onclick="document.getElementById('violation-freeze-overlay').remove(); if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().then(()=>enableKeyboardLock()).catch(e=>console.warn(e));">I Understand, Return to Exam</button>
       `;
       document.body.appendChild(overlay);
     }

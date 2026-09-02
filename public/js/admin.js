@@ -1732,11 +1732,14 @@ function renderComponentScoreCell(studentId, componentKey, componentTitle, score
             <span>${componentTitle}</span>
             <span style="color:#38bdf8;">${scoreVal} / 500</span>
           </div>
-          <div style="max-height:200px; overflow-y:auto; padding:4px 0;">
+          <div style="max-height:220px; overflow-y:auto; padding:4px 0;">
             ${exams.length > 0 ? exams.map(e => `
-              <div style="padding:6px 12px; font-size:0.8rem; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.04);">
-                <span style="color:#f1f5f9; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px;">${escapeHtml(e.exam_title || `Exam #${e.exam_number}`)}</span>
-                <span style="font-family:monospace; font-weight:700; color:${e.score > 0 ? '#34d399' : '#94a3b8'};">${e.score} / ${e.total_marks}</span>
+              <div style="padding:6px 12px; font-size:0.8rem; display:flex; flex-direction:column; border-bottom:1px solid rgba(255,255,255,0.04);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="color:#f1f5f9; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px;">${escapeHtml(e.exam_title || `Exam #${e.exam_number}`)}</span>
+                  <span style="font-family:monospace; font-weight:700; color:${e.score > 0 ? '#34d399' : '#94a3b8'};">${e.score} / ${e.total_marks}</span>
+                </div>
+                ${e.remarks ? `<div style="font-size:0.72rem; color:#f87171; margin-top:2px; line-height:1.2;">⚠️ ${escapeHtml(e.remarks)}</div>` : ''}
               </div>
             `).join('') : '<div style="padding:10px 12px; font-size:0.78rem; color:#64748b; text-align:center;">No exams attempted</div>'}
           </div>

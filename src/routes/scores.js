@@ -69,7 +69,7 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
     // Fetch batches for filter dropdown
     const batches = await db.prepare('SELECT id, name, description FROM batches ORDER BY name ASC').all();
 
-    // Fetch individual exam scores for all students to power the dropdowns
+    // Fetch individual exam scores and remarks for all students to power the dropdowns
     const examScoresRaw = await db.prepare(`
       SELECT 
         r.student_id,
@@ -78,12 +78,15 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
         e.exam_number,
         e.title as exam_title,
         e.total_marks,
-        COALESCE(SUM(s.marks_awarded), 0) as score
+        COALESCE(SUM(s.marks_awarded), 0) as score,
+        es.status as session_status,
+        es.remarks as session_remarks
       FROM responses r
       JOIN exams e ON e.id = r.exam_id
       JOIN components c ON c.id = e.component_id
+      LEFT JOIN exam_sessions es ON es.exam_id = e.id AND es.student_id = r.student_id
       LEFT JOIN scores s ON s.response_id = r.id
-      GROUP BY r.student_id, c.name, e.id, e.exam_number, e.title, e.total_marks
+      GROUP BY r.student_id, c.name, e.id, e.exam_number, e.title, e.total_marks, es.status, es.remarks
       ORDER BY e.exam_number ASC
     `).all();
 
@@ -104,6 +107,8 @@ router.get('/all', requireRole('admin'), async (req, res, next) => {
           exam_title: row.exam_title,
           total_marks: row.total_marks,
           score: Math.round((Number(row.score) || 0) * 10) / 10,
+          status: row.session_status || 'submitted',
+          remarks: row.session_remarks || null,
         });
       }
     }

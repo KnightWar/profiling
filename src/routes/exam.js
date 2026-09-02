@@ -274,9 +274,9 @@ router.post('/exams/:id/submit', async (req, res, next) => {
       }
     }
 
-    // Mark session as submitted
+    // Mark session as submitted with latest remarks
     await db.prepare(`
-      UPDATE exam_sessions SET status = 'submitted', submitted_at = CURRENT_TIMESTAMP, remarks = COALESCE(remarks, ?) WHERE id = ?
+      UPDATE exam_sessions SET status = 'submitted', submitted_at = CURRENT_TIMESTAMP, remarks = COALESCE(?, remarks) WHERE id = ?
     `).run(remarks || null, session.id);
 
     // Auto-grade MCQ responses

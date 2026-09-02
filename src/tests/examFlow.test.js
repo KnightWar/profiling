@@ -160,6 +160,44 @@ if __name__ == '__main__':
     assert.ok(composite.level >= 1, `Composite level should be assigned, got ${composite.level}`);
   });
 
+  await t.test('Auto-submit with Violation and Time-Over Remarks Recording', async () => {
+    // 1. Test violation remark on session
+    const violationRemark = 'Auto-submitted: Proctoring violation limit reached (3 window/tab violations)';
+    await db.prepare(`
+      UPDATE exam_sessions SET status = 'submitted', submitted_at = CURRENT_TIMESTAMP, remarks = COALESCE(?, remarks) WHERE id = ?
+    `).run(violationRemark, sessionId);
+
+    const updatedViolSession = await db.prepare('SELECT status, remarks FROM exam_sessions WHERE id = ?').get(sessionId);
+    assert.equal(updatedViolSession.status, 'submitted');
+    assert.equal(updatedViolSession.remarks, violationRemark);
+
+    // 2. Test time-over auto-submit session on another student
+    const student2 = await db.prepare(`
+      INSERT INTO users (name, email, password_hash, role, roll_no)
+      VALUES ('Test Flow Student 2', 'flow2@test.edu', 'hash', 'student', 'ROLL_FLOW_102')
+    `).run();
+    const student2Id = student2.lastInsertRowid;
+
+    const timeSession = await db.prepare(`
+      INSERT INTO exam_sessions (student_id, exam_id, status, started_at, ends_at)
+      VALUES (?, ?, 'active', CURRENT_TIMESTAMP, datetime('now', '-1 minutes'))
+    `).run(student2Id, examId);
+    const timeSessionId = timeSession.lastInsertRowid;
+
+    const timeRemark = 'Auto-submitted: Exam time expired';
+    await db.prepare(`
+      UPDATE exam_sessions SET status = 'submitted', submitted_at = CURRENT_TIMESTAMP, remarks = COALESCE(?, remarks) WHERE id = ?
+    `).run(timeRemark, timeSessionId);
+
+    const updatedTimeSession = await db.prepare('SELECT status, remarks FROM exam_sessions WHERE id = ?').get(timeSessionId);
+    assert.equal(updatedTimeSession.status, 'submitted');
+    assert.equal(updatedTimeSession.remarks, timeRemark);
+
+    // Cleanup student2
+    await db.prepare('DELETE FROM exam_sessions WHERE student_id = ?').run(student2Id);
+    await db.prepare('DELETE FROM users WHERE id = ?').run(student2Id);
+  });
+
   // Cleanup test records
   await db.prepare('DELETE FROM scores WHERE response_id IN (SELECT id FROM responses WHERE student_id = ?)').run(studentId);
   await db.prepare('DELETE FROM responses WHERE student_id = ?').run(studentId);

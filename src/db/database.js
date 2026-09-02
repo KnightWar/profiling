@@ -147,6 +147,9 @@ function getDb() {
 
 async function initDb() {
   if (isPg) {
+    // Get (or create) the singleton PG pool — `pool` was never a declared variable here
+    const pool = getPgPool();
+
     // Run Postgres migrations for existing databases before early return
     try { await pool.query("ALTER TABLE users ADD COLUMN login_authorized BOOLEAN DEFAULT false;"); } catch (e) {}
     try { await pool.query("ALTER TABLE users ADD COLUMN active_session_id TEXT;"); } catch (e) {}
